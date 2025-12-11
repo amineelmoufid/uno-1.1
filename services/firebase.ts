@@ -1,6 +1,7 @@
+
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update, get, child, onDisconnect } from "firebase/database";
-import { GameState } from "../types";
+import { GameState, GameType, ChessGameState } from "../types";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA1dOqowN6zPTIrk4A-7ckTl325bQgVGyI",
@@ -18,7 +19,19 @@ const db = getDatabase(app);
 
 export const FIXED_ROOM_ID = "AMINE_HASNAE_UNO_V1";
 
-// --- Game State ---
+// --- Game Selection ---
+
+export const setGameType = async (gameType: GameType) => {
+    await set(ref(db, `config/${FIXED_ROOM_ID}/activeGame`), gameType);
+};
+
+export const subscribeToGameType = (callback: (gameType: GameType) => void) => {
+    return onValue(ref(db, `config/${FIXED_ROOM_ID}/activeGame`), (snapshot) => {
+        callback(snapshot.val() || null);
+    });
+};
+
+// --- UNO Game State ---
 
 export const getGameSnapshot = async (roomId: string) => {
     const snapshot = await get(child(ref(db), `games/${roomId}`));
@@ -40,6 +53,19 @@ export const subscribeToGame = (roomId: string, callback: (data: GameState | nul
 export const updateGameState = async (roomId: string, newState: GameState) => {
   await set(ref(db, `games/${roomId}`), newState);
 };
+
+// --- Chess Game State ---
+
+export const updateChessState = async (roomId: string, newState: ChessGameState) => {
+    await set(ref(db, `games/${roomId}_CHESS`), newState);
+};
+
+export const subscribeToChess = (roomId: string, callback: (data: ChessGameState | null) => void) => {
+    return onValue(ref(db, `games/${roomId}_CHESS`), (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
 
 // --- Auth & Presence ---
 

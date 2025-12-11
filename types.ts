@@ -1,3 +1,4 @@
+
 export enum CardColor {
   Red = 'RED',
   Blue = 'BLUE',
@@ -40,8 +41,8 @@ export interface Player {
 
 export enum GameStatus {
   Setup = 'SETUP',
-  TurnStart = 'TURN_START', // Interstitial screen (Pass device)
-  TurnAction = 'TURN_ACTION', // Player is playing
+  TurnStart = 'TURN_START',
+  TurnAction = 'TURN_ACTION',
   Finished = 'FINISHED'
 }
 
@@ -54,5 +55,28 @@ export interface GameState {
   status: GameStatus;
   winner: Player | null;
   activeColor: CardColor;
+  log: string;
+}
+
+// --- Chess Types ---
+
+export type GameType = 'UNO' | 'CHESS' | null;
+
+export interface ChessPiece {
+  type: 'p' | 'r' | 'n' | 'b' | 'q' | 'k'; // pawn, rook, knight, bishop, queen, king
+  color: 'w' | 'b'; // white, black
+  hasMoved?: boolean;
+}
+
+export interface ChessGameState {
+  board: (ChessPiece | null)[][];
+  turn: 'w' | 'b';
+  winner: 'w' | 'b' | 'draw' | null;
+  lastMove: { 
+    from: {r: number, c: number}, 
+    to: {r: number, c: number},
+    piece: ChessPiece 
+  } | null;
+  inCheck?: boolean;
   log: string;
 }
