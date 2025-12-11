@@ -10,11 +10,14 @@ import {
     setGameType,
     subscribeToGameType,
     FIXED_ROOM_ID,
-    getGameSnapshot
+    getGameSnapshot,
+    setPlayerSelection,
+    subscribeToSelections,
+    resetSelections
 } from './services/firebase';
 import UnoGame from './components/UnoGame';
 import ChessGame from './components/ChessGame';
-import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles } from 'lucide-react';
+import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2 } from 'lucide-react';
 
 const PLAYER_AMINE = { id: 0, name: "Amine" };
 const PLAYER_HASNAE = { id: 1, name: "Hasnae" };
@@ -35,6 +38,7 @@ export default function App() {
 
   // Game Lobby State
   const [activeGame, setActiveGame] = useState<GameType>(null);
+  const [selections, setSelections] = useState<Record<string, GameType>>({});
 
   // --- Initialization & Presence ---
 
@@ -47,12 +51,32 @@ export default function App() {
 
   useEffect(() => {
       if (myPlayerId !== null) {
-          const unsub = subscribeToGameType((type) => {
+          const unsubGame = subscribeToGameType((type) => {
               setActiveGame(type);
           });
-          return () => unsub();
+          const unsubSel = subscribeToSelections((data) => {
+              setSelections(data || {});
+          });
+          return () => {
+              unsubGame();
+              unsubSel();
+          };
       }
   }, [myPlayerId]);
+
+  // Sync Logic: Start game if both players selected the same thing
+  useEffect(() => {
+    if (activeGame) return; // Already started
+    
+    const amineSel = selections['Amine'];
+    const hasnaeSel = selections['Hasnae'];
+
+    if (amineSel && hasnaeSel && amineSel === hasnaeSel) {
+        // Both match, start the game
+        setGameType(amineSel);
+    }
+  }, [selections, activeGame]);
+
 
   const handleIdentitySelect = async (identity: 'Amine' | 'Hasnae') => {
       setLoading(true);
@@ -99,6 +123,7 @@ export default function App() {
   const handleLogout = () => {
       if (selectedIdentity) {
           setPlayerOffline(selectedIdentity);
+          setPlayerSelection(selectedIdentity, null);
       }
       setMyPlayerId(null);
       setSelectedIdentity(null);
@@ -108,6 +133,15 @@ export default function App() {
 
   const handleExitGame = async () => {
       await setGameType(null);
+      await resetSelections();
+  };
+
+  const handleGameSelect = (game: GameType) => {
+      if (!selectedIdentity) return;
+      // Toggle selection or set new one
+      const current = selections[selectedIdentity];
+      const newSelection = current === game ? null : game;
+      setPlayerSelection(selectedIdentity, newSelection);
   };
 
   // --- Render Functions ---
@@ -235,6 +269,89 @@ export default function App() {
 
   // 2. Game Selection Lobby
   if (!activeGame) {
+      const opponentName = selectedIdentity === 'Amine' ? 'Hasnae' : 'Amine';
+      
+      const mySelection = selections[selectedIdentity!];
+      const opponentSelection = selections[opponentName];
+
+      const renderCard = (game: GameType, label: string, color: string, Icon: any, gradient: string) => {
+          const isMySelection = mySelection === game;
+          const isOpponentSelection = opponentSelection === game;
+          const isBoth = isMySelection && isOpponentSelection;
+
+          return (
+             <button 
+                onClick={() => handleGameSelect(game)}
+                className={`
+                    group relative h-80 bg-stone-900 border-2 rounded-3xl transition-all flex flex-col items-center justify-center gap-6 overflow-hidden shadow-2xl
+                    ${isMySelection ? `border-${color}-500 bg-stone-800 scale-105 z-10 ring-4 ring-${color}-500/20` : 'border-stone-800 hover:bg-stone-800 hover:border-stone-700'}
+                `}
+             >
+                 {/* Background Glow */}
+                 <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-0 ${isMySelection ? 'opacity-10' : 'group-hover:opacity-10'} transition-opacity`}></div>
+                 
+                 {/* Opponent Selection Indicator */}
+                 {isOpponentSelection && (
+                     <div className="absolute top-4 right-4 animate-in fade-in zoom-in duration-300">
+                         <div className={`
+                             flex items-center gap-2 px-3 py-1.5 rounded-full shadow-lg border border-stone-700
+                             ${opponentName === 'Amine' ? 'bg-indigo-900/90 text-indigo-100' : 'bg-rose-900/90 text-rose-100'}
+                         `}>
+                             <div className={`w-2 h-2 rounded-full animate-pulse ${opponentName === 'Amine' ? 'bg-indigo-400' : 'bg-rose-400'}`} />
+                             <span className="text-[10px] font-bold tracking-wider uppercase">{opponentName}</span>
+                         </div>
+                     </div>
+                 )}
+
+                 {/* Icon */}
+                 <div className={`
+                     flex gap-2 transition-transform duration-500
+                     ${isMySelection ? 'scale-110' : 'group-hover:scale-110'}
+                     ${game === 'UNO' ? 'rotate-[-5deg]' : ''}
+                 `}>
+                     {game === 'UNO' ? (
+                         <>
+                            <div className="w-12 h-16 bg-rose-500 rounded-lg shadow-lg"></div>
+                            <div className="w-12 h-16 bg-blue-500 rounded-lg shadow-lg"></div>
+                         </>
+                     ) : (
+                         <Icon size={48} className={isMySelection ? `text-${color}-400` : 'text-stone-500 group-hover:text-stone-300'} />
+                     )}
+                 </div>
+                 
+                 {/* Text Status */}
+                 <div className="relative z-10 flex flex-col items-center">
+                     <span className={`text-3xl font-black tracking-widest ${isMySelection ? 'text-white' : 'text-stone-400 group-hover:text-stone-200'}`}>
+                         {label}
+                     </span>
+                     
+                     <div className="h-6 mt-2">
+                         {isBoth ? (
+                             <span className={`text-xs font-bold text-${color}-400 flex items-center gap-1 animate-pulse`}>
+                                 <Loader2 size={12} className="animate-spin" /> STARTING...
+                             </span>
+                         ) : isMySelection ? (
+                             <span className="text-[10px] font-bold text-stone-500 tracking-widest uppercase animate-pulse">
+                                 WAITING FOR {opponentName}...
+                             </span>
+                         ) : isOpponentSelection ? (
+                             <span className="text-[10px] font-bold text-stone-500 tracking-widest uppercase">
+                                 OPPONENT READY
+                             </span>
+                         ) : null}
+                     </div>
+                 </div>
+
+                 {/* Selection Overlay */}
+                 {isMySelection && (
+                     <div className="absolute inset-x-0 bottom-0 h-1 bg-stone-100/20">
+                         <div className={`h-full bg-${color}-500 animate-[loading_2s_ease-in-out_infinite] w-full origin-left`}></div>
+                     </div>
+                 )}
+             </button>
+          );
+      };
+
       return (
         <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-950 text-stone-100 p-6">
             <div className="absolute top-4 left-4">
@@ -246,32 +363,20 @@ export default function App() {
             <h1 className="text-4xl font-black mb-12 tracking-tighter">SELECT GAME</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-                 <button 
-                    onClick={() => setGameType('UNO')}
-                    className="group relative h-80 bg-stone-900 border-2 border-stone-800 rounded-3xl hover:border-amber-400/50 hover:bg-stone-800 transition-all flex flex-col items-center justify-center gap-6 overflow-hidden"
-                 >
-                     <div className="absolute inset-0 bg-gradient-to-br from-rose-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                     <div className="flex gap-2 rotate-[-5deg] group-hover:scale-110 transition-transform duration-500">
-                         <div className="w-12 h-16 bg-rose-500 rounded-lg shadow-lg"></div>
-                         <div className="w-12 h-16 bg-blue-500 rounded-lg shadow-lg"></div>
-                     </div>
-                     <span className="text-3xl font-black tracking-widest relative z-10">UNO</span>
-                 </button>
-
-                 <button 
-                    onClick={() => setGameType('CHESS')}
-                    className="group relative h-80 bg-stone-900 border-2 border-stone-800 rounded-3xl hover:border-emerald-400/50 hover:bg-stone-800 transition-all flex flex-col items-center justify-center gap-6 overflow-hidden"
-                 >
-                     <div className="absolute inset-0 bg-gradient-to-br from-stone-700/10 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                     <div className="flex gap-4 group-hover:scale-110 transition-transform duration-500 text-stone-400 group-hover:text-stone-200">
-                         <Spade size={48} />
-                     </div>
-                     <span className="text-3xl font-black tracking-widest relative z-10">CHESS</span>
-                 </button>
+                 {renderCard('UNO', 'UNO', 'amber', null, 'from-rose-500/10 to-blue-500/10')}
+                 {renderCard('CHESS', 'CHESS', 'emerald', Spade, 'from-stone-700/10 to-white/5')}
             </div>
             
-            <div className="mt-12 text-center text-stone-500 text-sm max-w-xs animate-pulse">
-                Waiting for both players to join the same lobby...
+            <div className="mt-12 text-center text-stone-500 text-sm max-w-xs h-10 flex items-center justify-center">
+                {mySelection && !opponentSelection && (
+                    <span className="animate-pulse">Waiting for {opponentName} to join...</span>
+                )}
+                {!mySelection && opponentSelection && (
+                    <span className="text-stone-400 font-bold">{opponentName} is waiting for you in {opponentSelection}!</span>
+                )}
+                {mySelection && opponentSelection && mySelection !== opponentSelection && (
+                    <span className="text-amber-500 font-bold">You selected different games!</span>
+                )}
             </div>
         </div>
       );

@@ -31,6 +31,21 @@ export const subscribeToGameType = (callback: (gameType: GameType) => void) => {
     });
 };
 
+// New: Individual Player Selections
+export const setPlayerSelection = async (playerName: string, gameType: GameType) => {
+    await set(ref(db, `config/${FIXED_ROOM_ID}/selections/${playerName}`), gameType);
+};
+
+export const subscribeToSelections = (callback: (data: Record<string, GameType> | null) => void) => {
+    return onValue(ref(db, `config/${FIXED_ROOM_ID}/selections`), (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
+export const resetSelections = async () => {
+    await set(ref(db, `config/${FIXED_ROOM_ID}/selections`), null);
+};
+
 // --- UNO Game State ---
 
 export const getGameSnapshot = async (roomId: string) => {

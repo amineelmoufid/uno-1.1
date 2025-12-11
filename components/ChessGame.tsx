@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { ChessGameState, ChessPiece } from '../types';
 import { updateChessState, subscribeToChess, FIXED_ROOM_ID } from '../services/firebase';
 import { getLegalMoves, performMove } from '../services/chessLogic';
-import { RefreshCw, Trophy, ChevronLeft, Circle, History } from 'lucide-react';
+import { RefreshCw, Trophy, ChevronLeft, Loader2 } from 'lucide-react';
 
-const INITIAL_BOARD: (ChessPiece | null)[][] = [
+// Factory function to ensure a fresh board object every time we start/restart
+const getInitialBoard = (): (ChessPiece | null)[][] => [
     [{type: 'r', color: 'b', hasMoved: false}, {type: 'n', color: 'b', hasMoved: false}, {type: 'b', color: 'b', hasMoved: false}, {type: 'q', color: 'b', hasMoved: false}, {type: 'k', color: 'b', hasMoved: false}, {type: 'b', color: 'b', hasMoved: false}, {type: 'n', color: 'b', hasMoved: false}, {type: 'r', color: 'b', hasMoved: false}],
     [{type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}, {type: 'p', color: 'b', hasMoved: false}],
     Array(8).fill(null),
@@ -44,6 +45,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
     const [gameState, setGameState] = useState<ChessGameState | null>(null);
     const [selectedPos, setSelectedPos] = useState<{r: number, c: number} | null>(null);
     const [validMoves, setValidMoves] = useState<{r: number, c: number}[]>([]);
+    const [isResetting, setIsResetting] = useState(false);
 
     const myColor = myPlayerId === 0 ? 'w' : 'b';
     const opponentName = myPlayerId === 0 ? "Hasnae" : "Amine";
@@ -52,7 +54,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
         const unsub = subscribeToChess(FIXED_ROOM_ID, (data) => {
             if (!data) {
                 const initial: ChessGameState = {
-                    board: INITIAL_BOARD,
+                    board: getInitialBoard(),
                     turn: 'w',
                     winner: null,
                     lastMove: null,
@@ -65,11 +67,12 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                     ...data, 
                     board: sanitizeBoard(data.board),
                     turn: data.turn || 'w',
-                    winner: data.winner || null,
+                    winner: data.winner || null, // Ensure explicit null
                     lastMove: data.lastMove || null,
                     inCheck: data.inCheck || false
                 });
             }
+            setIsResetting(false);
         });
         return () => unsub();
     }, []);
@@ -112,19 +115,34 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
         setValidMoves([]);
     };
 
-    const resetGame = () => {
-        if (window.confirm("Restart Chess?")) {
-            const initial: ChessGameState = {
-                board: INITIAL_BOARD,
-                turn: 'w',
-                winner: null,
-                lastMove: null,
-                log: 'Game Restarted',
-                inCheck: false
-            };
-            updateChessState(FIXED_ROOM_ID, initial);
-            setSelectedPos(null);
-            setValidMoves([]);
+    const handleNewGame = async (e?: React.MouseEvent) => {
+        e?.preventDefault();
+        e?.stopPropagation();
+        
+        if (isResetting) return;
+        
+        // Remove window.confirm blocking to ensure button always works.
+        // If players want to reset, they reset.
+        setIsResetting(true);
+        setSelectedPos(null);
+        setValidMoves([]);
+        
+        const initial: ChessGameState = {
+            board: getInitialBoard(),
+            turn: 'w',
+            winner: null,
+            lastMove: null,
+            log: 'Game Restarted',
+            inCheck: false
+        };
+
+        try {
+            await updateChessState(FIXED_ROOM_ID, initial);
+            // We rely on the subscription to update the local gameState
+            // but we can optimistic update if needed. Subscription is usually fast enough.
+        } catch (err) {
+            console.error("Failed to reset game:", err);
+            setIsResetting(false);
         }
     };
 
@@ -139,7 +157,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
     return (
         <div className="h-screen w-full flex flex-col bg-stone-950 text-stone-100 overflow-hidden font-sans selection:bg-transparent">
              {/* Header */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-stone-900 bg-stone-950 z-20 shadow-sm">
+            <div className="h-16 flex items-center justify-between px-6 border-b border-stone-900 bg-stone-950 z-20 shadow-sm relative">
                 <button onClick={onExit} className="text-xs font-bold text-stone-500 hover:text-stone-300 flex items-center gap-1 transition-colors">
                     <ChevronLeft size={16} /> LOBBY
                 </button>
@@ -149,8 +167,13 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                          <span className="text-[10px] text-rose-500 font-bold animate-pulse tracking-widest mt-0.5">CHECK</span>
                     )}
                 </div>
-                <button onClick={resetGame} className="text-stone-600 hover:text-stone-400 transition-colors">
-                    <RefreshCw size={18} />
+                <button 
+                    onClick={handleNewGame} 
+                    disabled={isResetting}
+                    className="text-xs font-bold text-stone-500 hover:text-stone-300 flex items-center gap-2 border border-stone-800 bg-stone-900 px-3 py-1.5 rounded hover:bg-stone-800 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isResetting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} 
+                    <span className="hidden sm:inline">{isResetting ? 'RESETTING' : 'NEW GAME'}</span>
                 </button>
             </div>
 
@@ -163,8 +186,8 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                          <div className="text-5xl font-black mb-10 tracking-tighter text-stone-200">
                             {gameState.winner === 'draw' ? 'DRAW' : gameState.winner === 'w' ? 'WHITE WINS' : 'BLACK WINS'}
                          </div>
-                         <button onClick={resetGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
-                             PLAY AGAIN
+                         <button onClick={handleNewGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
+                             {isResetting ? 'LOADING...' : 'PLAY AGAIN'}
                          </button>
                      </div>
                  ) : null}
