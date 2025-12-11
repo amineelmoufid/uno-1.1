@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ChessGameState, ChessPiece } from '../types';
 import { updateChessState, subscribeToChess, FIXED_ROOM_ID } from '../services/firebase';
 import { getLegalMoves, performMove } from '../services/chessLogic';
-import { RefreshCw, Trophy, ChevronLeft, Circle } from 'lucide-react';
+import { RefreshCw, Trophy, ChevronLeft, Circle, History } from 'lucide-react';
 
 const INITIAL_BOARD: (ChessPiece | null)[][] = [
     [{type: 'r', color: 'b', hasMoved: false}, {type: 'n', color: 'b', hasMoved: false}, {type: 'b', color: 'b', hasMoved: false}, {type: 'q', color: 'b', hasMoved: false}, {type: 'k', color: 'b', hasMoved: false}, {type: 'b', color: 'b', hasMoved: false}, {type: 'n', color: 'b', hasMoved: false}, {type: 'r', color: 'b', hasMoved: false}],
@@ -16,9 +16,9 @@ const INITIAL_BOARD: (ChessPiece | null)[][] = [
     [{type: 'r', color: 'w', hasMoved: false}, {type: 'n', color: 'w', hasMoved: false}, {type: 'b', color: 'w', hasMoved: false}, {type: 'q', color: 'w', hasMoved: false}, {type: 'k', color: 'w', hasMoved: false}, {type: 'b', color: 'w', hasMoved: false}, {type: 'n', color: 'w', hasMoved: false}, {type: 'r', color: 'w', hasMoved: false}],
 ];
 
-const PIECE_SYMBOLS: Record<string, string> = {
-    'kw': '♔', 'qw': '♕', 'rw': '♖', 'bw': '♗', 'nw': '♘', 'pw': '♙',
-    'kb': '♚', 'qb': '♛', 'rb': '♜', 'bb': '♝', 'nb': '♞', 'pb': '♟'
+// Use solid glyphs for both colors to maintain visual weight; color is handled by CSS
+const PIECE_GLYPHS: Record<string, string> = {
+    'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
 };
 
 interface ChessGameProps {
@@ -128,108 +128,173 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
         }
     };
 
-    if (!gameState) return <div className="h-full flex items-center justify-center text-stone-500">Loading Chess...</div>;
+    if (!gameState) return <div className="h-full flex items-center justify-center text-stone-500 bg-stone-950">Loading Chess...</div>;
 
-    // We can safely map now because sanitizeBoard ensures arrays
-    const displayBoard = myPlayerId === 1 
+    // View logic: If I'm Black, reverse board.
+    const isFlipped = myPlayerId === 1;
+    const displayBoard = isFlipped 
         ? [...gameState.board].reverse().map(r => [...r].reverse())
         : gameState.board;
 
     return (
-        <div className="h-screen w-full flex flex-col bg-stone-900 text-stone-100 overflow-hidden">
+        <div className="h-screen w-full flex flex-col bg-stone-950 text-stone-100 overflow-hidden font-sans selection:bg-transparent">
              {/* Header */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-stone-800 bg-stone-950 z-10">
-                <button onClick={onExit} className="text-xs font-bold text-stone-600 hover:text-stone-400 flex items-center gap-1">
-                    <ChevronLeft size={14} /> LOBBY
+            <div className="h-16 flex items-center justify-between px-6 border-b border-stone-900 bg-stone-950 z-20 shadow-sm">
+                <button onClick={onExit} className="text-xs font-bold text-stone-500 hover:text-stone-300 flex items-center gap-1 transition-colors">
+                    <ChevronLeft size={16} /> LOBBY
                 </button>
                 <div className="flex flex-col items-center">
-                    <h1 className="font-black text-xl tracking-wider">CHESS</h1>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-stone-500 font-mono uppercase tracking-widest">{gameState.turn === 'w' ? "White's Turn" : "Black's Turn"}</span>
-                        {gameState.inCheck && !gameState.winner && <span className="text-[10px] text-rose-500 font-black animate-pulse">CHECK</span>}
-                    </div>
+                    <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">CHESS</h1>
+                    {gameState.inCheck && !gameState.winner && (
+                         <span className="text-[10px] text-rose-500 font-bold animate-pulse tracking-widest mt-0.5">CHECK</span>
+                    )}
                 </div>
-                <button onClick={resetGame} className="text-stone-600 hover:text-stone-400">
+                <button onClick={resetGame} className="text-stone-600 hover:text-stone-400 transition-colors">
                     <RefreshCw size={18} />
                 </button>
             </div>
 
-            {/* Board Area */}
-            <div className="flex-1 flex flex-col items-center justify-center p-4 bg-stone-900/50">
+            {/* Game Area */}
+            <div className="flex-1 flex flex-col items-center justify-center relative">
                  {gameState.winner ? (
-                     <div className="flex flex-col items-center animate-in zoom-in">
-                         <Trophy size={64} className="text-amber-400 mb-4" />
-                         <h2 className="text-4xl font-black mb-6">
+                     <div className="absolute inset-0 z-30 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
+                         <Trophy size={64} className="text-amber-400 mb-6 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]" />
+                         <h2 className="text-3xl font-light tracking-widest mb-2 text-white">GAME OVER</h2>
+                         <div className="text-5xl font-black mb-10 tracking-tighter text-stone-200">
                             {gameState.winner === 'draw' ? 'DRAW' : gameState.winner === 'w' ? 'WHITE WINS' : 'BLACK WINS'}
-                         </h2>
-                         <button onClick={resetGame} className="bg-stone-100 text-stone-900 px-8 py-3 rounded-xl font-bold">New Game</button>
+                         </div>
+                         <button onClick={resetGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
+                             PLAY AGAIN
+                         </button>
                      </div>
-                 ) : (
-                    <div className="relative">
-                        {/* Opponent Label */}
-                        <div className={`text-center mb-4 text-xs font-bold tracking-widest flex items-center justify-center gap-2 ${gameState.turn !== myColor ? 'text-amber-400 animate-pulse' : 'text-stone-600'}`}>
-                            {gameState.turn !== myColor && <div className="w-2 h-2 rounded-full bg-amber-400" />}
-                            {opponentName.toUpperCase()}
+                 ) : null}
+
+                {/* Opponent Info */}
+                <div className={`w-full max-w-[480px] px-4 mb-4 flex justify-between items-end opacity-90 transition-opacity ${gameState.turn !== myColor ? 'opacity-100' : 'opacity-50'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg
+                            ${myColor === 'w' ? 'bg-stone-800 text-stone-400 border border-stone-700' : 'bg-stone-200 text-stone-800'}
+                        `}>
+                            {opponentName[0]}
                         </div>
-
-                        {/* Chess Board */}
-                        <div className="w-[340px] h-[340px] sm:w-[480px] sm:h-[480px] bg-stone-800 border-8 border-stone-800 rounded-lg shadow-2xl relative grid grid-cols-8 grid-rows-8 overflow-hidden ring-1 ring-stone-700">
-                            {displayBoard.map((row, rIdx) => (
-                                row.map((piece, cIdx) => {
-                                    // Map visual coordinates to logical
-                                    const actualR = myPlayerId === 1 ? 7 - rIdx : rIdx;
-                                    const actualC = myPlayerId === 1 ? 7 - cIdx : cIdx;
-
-                                    const isBlackSquare = (actualR + actualC) % 2 === 1;
-                                    const isSelected = selectedPos?.r === actualR && selectedPos?.c === actualC;
-                                    
-                                    // Highlight last move
-                                    const isLastMoveFrom = gameState.lastMove?.from.r === actualR && gameState.lastMove.from.c === actualC;
-                                    const isLastMoveTo = gameState.lastMove?.to.r === actualR && gameState.lastMove.to.c === actualC;
-                                    
-                                    const isValidTarget = validMoves.some(m => m.r === actualR && m.c === actualC);
-                                    const isCapture = isValidTarget && piece;
-
-                                    // Check highlight
-                                    const isKingInCheck = gameState.inCheck && piece?.type === 'k' && piece.color === gameState.turn;
-
-                                    return (
-                                        <div 
-                                            key={`${actualR}-${actualC}`}
-                                            onClick={() => handleSquareClick(actualR, actualC)}
-                                            className={`
-                                                flex items-center justify-center text-3xl sm:text-5xl select-none cursor-pointer relative transition-colors duration-100
-                                                ${isBlackSquare ? 'bg-[#57534e]' : 'bg-[#a8a29e]'}
-                                                ${isSelected ? 'ring-inset ring-4 ring-amber-400 bg-amber-200/50' : ''}
-                                                ${(isLastMoveFrom || isLastMoveTo) && !isSelected ? 'bg-indigo-500/40' : ''}
-                                                ${isKingInCheck ? 'bg-rose-600/80 ring-inset ring-4 ring-rose-500' : ''}
-                                                ${piece?.color === 'w' ? 'text-[#f5f5f4] drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]' : 'text-[#1c1917] drop-shadow-[0_2px_2px_rgba(255,255,255,0.2)]'}
-                                            `}
-                                        >
-                                            <span className="relative z-10 transform hover:scale-105 transition-transform duration-200">
-                                                {piece ? PIECE_SYMBOLS[piece.type + piece.color] : ''}
-                                            </span>
-                                            
-                                            {/* Valid move indicator */}
-                                            {isValidTarget && !isCapture && (
-                                                <div className="absolute w-4 h-4 rounded-full bg-emerald-500/60 pointer-events-none shadow-sm"></div>
-                                            )}
-                                            {isValidTarget && isCapture && (
-                                                <div className="absolute inset-0 ring-inset ring-8 ring-rose-500/40 pointer-events-none"></div>
-                                            )}
-                                        </div>
-                                    );
-                                })
-                            ))}
-                        </div>
-
-                        {/* My Label */}
-                        <div className={`text-center mt-4 text-xs font-bold tracking-widest flex items-center justify-center gap-2 ${gameState.turn === myColor ? 'text-green-400 animate-pulse' : 'text-stone-600'}`}>
-                            {gameState.turn === myColor && <div className="w-2 h-2 rounded-full bg-green-400" />}
-                            YOU ({myColor === 'w' ? 'White' : 'Black'})
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold tracking-wider text-stone-300">{opponentName}</span>
+                            <span className="text-[10px] font-mono text-stone-500 uppercase">
+                                {gameState.turn !== myColor ? 'Thinking...' : 'Waiting'}
+                            </span>
                         </div>
                     </div>
-                 )}
+                    {/* Graveyard (Simplified) */}
+                    <div className="h-6 flex items-center gap-1">
+                        {/* Future feature: Captured pieces */}
+                    </div>
+                </div>
+
+                {/* Board Container */}
+                <div className="relative shadow-2xl shadow-black/50 rounded-md overflow-hidden ring-1 ring-white/10 select-none">
+                    <div className="grid grid-cols-8 grid-rows-8 w-[90vw] h-[90vw] max-w-[480px] max-h-[480px]">
+                        {displayBoard.map((row, rIdx) => (
+                            row.map((piece, cIdx) => {
+                                // Logic Coords
+                                const actualR = isFlipped ? 7 - rIdx : rIdx;
+                                const actualC = isFlipped ? 7 - cIdx : cIdx;
+
+                                // Colors
+                                const isBlackSquare = (actualR + actualC) % 2 === 1;
+                                const bgClass = isBlackSquare ? 'bg-[#57534e]' : 'bg-[#d6d3d1]'; // Stone-600 vs Stone-300
+                                
+                                // State Checks
+                                const isSelected = selectedPos?.r === actualR && selectedPos?.c === actualC;
+                                const isLastMoveFrom = gameState.lastMove?.from.r === actualR && gameState.lastMove.from.c === actualC;
+                                const isLastMoveTo = gameState.lastMove?.to.r === actualR && gameState.lastMove.to.c === actualC;
+                                const isValidTarget = validMoves.some(m => m.r === actualR && m.c === actualC);
+                                const isCapture = isValidTarget && piece;
+                                const isKingInCheck = gameState.inCheck && piece?.type === 'k' && piece.color === gameState.turn;
+
+                                // Coords Text
+                                const showRank = cIdx === 0;
+                                const showFile = rIdx === 7;
+                                const rankLabel = isFlipped ? 1 + rIdx : 8 - rIdx;
+                                const fileLabel = String.fromCharCode(isFlipped ? 104 - cIdx : 97 + cIdx);
+
+                                return (
+                                    <div 
+                                        key={`${actualR}-${actualC}`}
+                                        onClick={() => handleSquareClick(actualR, actualC)}
+                                        className={`
+                                            relative flex items-center justify-center cursor-pointer
+                                            ${bgClass}
+                                            transition-colors duration-150
+                                        `}
+                                    >
+                                        {/* Coordinates */}
+                                        {showRank && (
+                                            <span className={`absolute top-0.5 left-1 text-[8px] sm:text-[10px] font-bold ${isBlackSquare ? 'text-[#d6d3d1]' : 'text-[#57534e]'}`}>
+                                                {rankLabel}
+                                            </span>
+                                        )}
+                                        {showFile && (
+                                            <span className={`absolute bottom-0 right-1 text-[8px] sm:text-[10px] font-bold ${isBlackSquare ? 'text-[#d6d3d1]' : 'text-[#57534e]'}`}>
+                                                {fileLabel}
+                                            </span>
+                                        )}
+
+                                        {/* Highlights */}
+                                        {isLastMoveFrom && <div className="absolute inset-0 bg-yellow-500/20 mix-blend-overlay" />}
+                                        {isLastMoveTo && <div className="absolute inset-0 bg-yellow-500/30 mix-blend-overlay" />}
+                                        {isSelected && <div className="absolute inset-0 bg-emerald-500/30 mix-blend-multiply ring-inset ring-2 ring-emerald-500/50" />}
+                                        
+                                        {/* Valid Move Markers */}
+                                        {isValidTarget && !isCapture && (
+                                            <div className="absolute w-3 h-3 sm:w-4 sm:h-4 bg-black/10 rounded-full shadow-inner pointer-events-none" />
+                                        )}
+                                        {isValidTarget && isCapture && (
+                                            <div className="absolute inset-0 ring-[6px] ring-inset ring-black/10 rounded-none pointer-events-none" />
+                                        )}
+                                        
+                                        {/* Danger/Check */}
+                                        {isKingInCheck && (
+                                            <div className="absolute inset-0 bg-red-500/50 rounded-full blur-xl scale-75 animate-pulse" />
+                                        )}
+
+                                        {/* Piece */}
+                                        {piece && (
+                                            <span 
+                                                className={`
+                                                    relative z-10 text-4xl sm:text-6xl select-none leading-none
+                                                    ${piece.color === 'w' ? 'text-white drop-shadow-[0_2px_1px_rgba(0,0,0,0.3)]' : 'text-stone-900 drop-shadow-[0_1px_0px_rgba(255,255,255,0.2)]'}
+                                                    transition-transform duration-200
+                                                    ${isSelected ? 'scale-110 -translate-y-1' : ''}
+                                                `}
+                                                style={{fontFamily: 'Segoe UI Symbol, Apple Symbols, sans-serif'}} // Ensure glyph support
+                                            >
+                                                {PIECE_GLYPHS[piece.type]}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        ))}
+                    </div>
+                </div>
+
+                 {/* My Info */}
+                 <div className={`w-full max-w-[480px] px-4 mt-4 flex justify-between items-start opacity-90 transition-opacity ${gameState.turn === myColor ? 'opacity-100' : 'opacity-50'}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg
+                             ${myColor === 'w' ? 'bg-stone-200 text-stone-800' : 'bg-stone-800 text-stone-400 border border-stone-700'}
+                        `}>
+                            {myPlayerId === 0 ? 'A' : 'H'}
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-sm font-bold tracking-wider text-stone-300">YOU</span>
+                            <span className="text-[10px] font-mono text-emerald-500 uppercase font-bold">
+                                {gameState.turn === myColor ? 'Your Turn' : ''}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     );
