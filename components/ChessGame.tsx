@@ -49,6 +49,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
 
     const myColor = myPlayerId === 0 ? 'w' : 'b';
     const opponentName = myPlayerId === 0 ? "Hasnae" : "Amine";
+    const opponentColor = myColor === 'w' ? 'b' : 'w';
 
     useEffect(() => {
         const unsub = subscribeToChess(FIXED_ROOM_ID, (data) => {
@@ -138,8 +139,6 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
 
         try {
             await updateChessState(FIXED_ROOM_ID, initial);
-            // We rely on the subscription to update the local gameState
-            // but we can optimistic update if needed. Subscription is usually fast enough.
         } catch (err) {
             console.error("Failed to reset game:", err);
             setIsResetting(false);
@@ -153,6 +152,12 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
     const displayBoard = isFlipped 
         ? [...gameState.board].reverse().map(r => [...r].reverse())
         : gameState.board;
+    
+    // UI Helpers
+    const getAvatarStyle = (color: 'w' | 'b') => {
+        if (color === 'w') return "bg-indigo-100 text-indigo-900 shadow-[0_0_15px_rgba(224,231,255,0.4)]";
+        return "bg-rose-950 text-rose-100 border border-rose-800 shadow-[0_0_15px_rgba(244,63,94,0.2)]";
+    };
 
     return (
         <div className="h-screen w-full flex flex-col bg-stone-950 text-stone-100 overflow-hidden font-sans selection:bg-transparent">
@@ -195,9 +200,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                 {/* Opponent Info */}
                 <div className={`w-full max-w-[480px] px-4 mb-4 flex justify-between items-end opacity-90 transition-opacity ${gameState.turn !== myColor ? 'opacity-100' : 'opacity-50'}`}>
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg
-                            ${myColor === 'w' ? 'bg-stone-800 text-stone-400 border border-stone-700' : 'bg-stone-200 text-stone-800'}
-                        `}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg transition-colors ${getAvatarStyle(opponentColor)}`}>
                             {opponentName[0]}
                         </div>
                         <div className="flex flex-col">
@@ -206,10 +209,6 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                                 {gameState.turn !== myColor ? 'Thinking...' : 'Waiting'}
                             </span>
                         </div>
-                    </div>
-                    {/* Graveyard (Simplified) */}
-                    <div className="h-6 flex items-center gap-1">
-                        {/* Future feature: Captured pieces */}
                     </div>
                 </div>
 
@@ -285,9 +284,12 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                                             <span 
                                                 className={`
                                                     relative z-10 text-4xl sm:text-6xl select-none leading-none
-                                                    ${piece.color === 'w' ? 'text-white drop-shadow-[0_2px_1px_rgba(0,0,0,0.3)]' : 'text-stone-900 drop-shadow-[0_1px_0px_rgba(255,255,255,0.2)]'}
                                                     transition-transform duration-200
                                                     ${isSelected ? 'scale-110 -translate-y-1' : ''}
+                                                    ${piece.color === 'w' 
+                                                        ? 'text-indigo-50 drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]' 
+                                                        : 'text-rose-950 drop-shadow-[0_1px_0px_rgba(255,255,255,0.4)]'
+                                                    }
                                                 `}
                                                 style={{fontFamily: 'Segoe UI Symbol, Apple Symbols, sans-serif'}} // Ensure glyph support
                                             >
@@ -304,9 +306,7 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                  {/* My Info */}
                  <div className={`w-full max-w-[480px] px-4 mt-4 flex justify-between items-start opacity-90 transition-opacity ${gameState.turn === myColor ? 'opacity-100' : 'opacity-50'}`}>
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg
-                             ${myColor === 'w' ? 'bg-stone-200 text-stone-800' : 'bg-stone-800 text-stone-400 border border-stone-700'}
-                        `}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg transition-colors ${getAvatarStyle(myColor)}`}>
                             {myPlayerId === 0 ? 'A' : 'H'}
                         </div>
                         <div className="flex flex-col">
