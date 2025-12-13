@@ -7,19 +7,6 @@ const WINNING_LINES = [
     [0, 4, 8], [2, 4, 6]             // Diags
 ];
 
-// Neighbors (King's move in chess / standard adjacency including diagonals)
-const ADJACENCY: Record<number, number[]> = {
-    0: [1, 3, 4],
-    1: [0, 2, 3, 4, 5],
-    2: [1, 4, 5],
-    3: [0, 1, 4, 6, 7],
-    4: [0, 1, 2, 3, 5, 6, 7, 8],
-    5: [1, 2, 4, 7, 8],
-    6: [3, 4, 7],
-    7: [3, 4, 5, 6, 8],
-    8: [4, 5, 7]
-};
-
 export const getInitialTTTMoveState = (): TTTMoveGameState => ({
     board: Array(9).fill(null),
     turn: 'X',
@@ -71,9 +58,7 @@ export const performTTTAction = (
         if (newState.board[action.from] !== turn) throw new Error("Not your piece");
         if (newState.board[action.to]) throw new Error("Square occupied");
         
-        if (!ADJACENCY[action.from].includes(action.to)) {
-            throw new Error("Invalid move: Not adjacent");
-        }
+        // ALLOW ANY MOVE TO EMPTY SQUARE (Removed adjacency check)
 
         newState.board[action.from] = null;
         newState.board[action.to] = turn;

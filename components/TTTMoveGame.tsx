@@ -25,9 +25,10 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
             if (!data) {
                 updateTTTMoveState(FIXED_ROOM_ID, getInitialTTTMoveState());
             } else {
-                // Sanitize
-                const safeBoard = (data.board || []).map(c => c ?? null);
-                while(safeBoard.length < 9) safeBoard.push(null);
+                // Sanitize: Firebase might return an object for sparse arrays
+                const rawBoard = data.board || {}; 
+                const safeBoard = Array.from({ length: 9 }).map((_, i) => rawBoard[i] ?? null);
+                
                 setGameState({
                     ...data,
                     board: safeBoard,
@@ -142,18 +143,10 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
                             (gameState.phase === 'MOVE' && (cell === myMark || (!cell && selectedIdx !== null)))
                         );
                         
-                        // Check if valid move target (simple adjacency heuristic for highlighting)
-                        // This logic mirrors `performTTTAction` validation roughly for UI hints
+                        // Highlight any empty square if a piece is selected during MOVE phase
                         let isHighlight = false;
                         if (gameState.phase === 'MOVE' && selectedIdx !== null && !cell && isMyTurn) {
-                            // Adjacency check
-                            // Copied ADJACENCY logic for UI only:
-                            const adj: Record<number, number[]> = {
-                                0: [1, 3, 4], 1: [0, 2, 3, 4, 5], 2: [1, 4, 5],
-                                3: [0, 1, 4, 6, 7], 4: [0, 1, 2, 3, 5, 6, 7, 8], 5: [1, 2, 4, 7, 8],
-                                6: [3, 4, 7], 7: [3, 4, 5, 6, 8], 8: [4, 5, 7]
-                            };
-                            if (adj[selectedIdx].includes(i)) isHighlight = true;
+                           isHighlight = true;
                         }
 
                         return (
