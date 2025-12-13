@@ -1,7 +1,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update, get, child, onDisconnect } from "firebase/database";
-import { GameState, GameType, ChessGameState } from "../types";
+import { GameState, GameType, ChessGameState, MorrisGameState, TTTMoveGameState } from "../types";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA1dOqowN6zPTIrk4A-7ckTl325bQgVGyI",
@@ -77,6 +77,30 @@ export const updateChessState = async (roomId: string, newState: ChessGameState)
 
 export const subscribeToChess = (roomId: string, callback: (data: ChessGameState | null) => void) => {
     return onValue(ref(db, `games/${roomId}_CHESS`), (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
+// --- Morris Game State ---
+
+export const updateMorrisState = async (roomId: string, newState: MorrisGameState) => {
+    await set(ref(db, `games/${roomId}_MORRIS`), newState);
+};
+
+export const subscribeToMorris = (roomId: string, callback: (data: MorrisGameState | null) => void) => {
+    return onValue(ref(db, `games/${roomId}_MORRIS`), (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
+// --- TTT Move Game State ---
+
+export const updateTTTMoveState = async (roomId: string, newState: TTTMoveGameState) => {
+    await set(ref(db, `games/${roomId}_TTT_MOVE`), newState);
+};
+
+export const subscribeToTTTMove = (roomId: string, callback: (data: TTTMoveGameState | null) => void) => {
+    return onValue(ref(db, `games/${roomId}_TTT_MOVE`), (snapshot) => {
         callback(snapshot.val());
     });
 };

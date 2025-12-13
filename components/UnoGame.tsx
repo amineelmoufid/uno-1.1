@@ -357,6 +357,13 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
       return <div className="h-full flex items-center justify-center text-stone-500">Loading Game...</div>;
   }
 
+  // Safety: Ensure players array exists
+  const players = gameState.players || [];
+  const me = players[myPlayerId] || null;
+  const myHand = me?.hand || [];
+  const opponent = players.find(p => p.id !== myPlayerId) || null;
+  const opponentHand = opponent?.hand || [];
+
   if (gameState.status === GameStatus.Finished) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-stone-900 text-stone-100 relative overflow-hidden">
@@ -377,10 +384,6 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
     );
   }
 
-  const me = gameState.players[myPlayerId];
-  const myHand = me?.hand || [];
-  const opponent = gameState.players.find(p => p.id !== myPlayerId);
-  const opponentHand = opponent?.hand || [];
   const isMyTurn = gameState.currentPlayerIndex === myPlayerId;
   const discardPile = gameState.discardPile || [];
   const topCard = discardPile[discardPile.length - 1];
@@ -388,7 +391,7 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
 
   return (
     <div className="h-screen w-full flex flex-col bg-stone-950 text-stone-100 relative overflow-hidden">
-      {gameState.players.map(p => p.shout ? (
+      {(players).map(p => p.shout ? (
         <div key={p.id} className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none animate-in fade-in zoom-in duration-300">
              <div className="bg-red-600/90 text-white font-black text-4xl px-8 py-4 rounded-3xl shadow-[0_0_100px_rgba(220,38,38,0.8)] rotate-[-5deg] animate-bounce">
                  {p.shout.text}

@@ -17,7 +17,9 @@ import {
 } from './services/firebase';
 import UnoGame from './components/UnoGame';
 import ChessGame from './components/ChessGame';
-import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2 } from 'lucide-react';
+import MorrisGame from './components/MorrisGame';
+import TTTMoveGame from './components/TTTMoveGame';
+import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2, Grid3x3, LayoutGrid } from 'lucide-react';
 
 const PLAYER_AMINE = { id: 0, name: "Amine" };
 const PLAYER_HASNAE = { id: 1, name: "Hasnae" };
@@ -83,13 +85,17 @@ export default function App() {
       setSelectedIdentity(identity);
       
       const dbPin = await getPlayerPin(identity);
-      setStoredPin(dbPin);
       
-      if (dbPin) {
+      // Robustness fix: Firebase might return number if stored as number. 
+      // We perform comparison with string input, so cast it.
+      if (dbPin !== null && dbPin !== undefined) {
+          setStoredPin(String(dbPin));
           setLoginStep('ENTER_PIN');
       } else {
+          setStoredPin(null);
           setLoginStep('CREATE_PIN');
       }
+      
       setPinInput("");
       setPinError("");
       setLoading(false);
@@ -103,6 +109,7 @@ export default function App() {
           await setPlayerPin(selectedIdentity!, pinInput);
           finalizeLogin();
       } else {
+          // Both are strings now
           if (pinInput === storedPin) {
               finalizeLogin();
           } else {
@@ -283,7 +290,7 @@ export default function App() {
              <button 
                 onClick={() => handleGameSelect(game)}
                 className={`
-                    group relative h-80 bg-stone-900 border-2 rounded-3xl transition-all flex flex-col items-center justify-center gap-6 overflow-hidden shadow-2xl
+                    group relative h-72 bg-stone-900 border-2 rounded-3xl transition-all flex flex-col items-center justify-center gap-6 overflow-hidden shadow-2xl
                     ${isMySelection ? `border-${color}-500 bg-stone-800 scale-105 z-10 ring-4 ring-${color}-500/20` : 'border-stone-800 hover:bg-stone-800 hover:border-stone-700'}
                 `}
              >
@@ -311,8 +318,8 @@ export default function App() {
                  `}>
                      {game === 'UNO' ? (
                          <>
-                            <div className="w-12 h-16 bg-rose-500 rounded-lg shadow-lg"></div>
-                            <div className="w-12 h-16 bg-blue-500 rounded-lg shadow-lg"></div>
+                            <div className="w-10 h-14 bg-rose-500 rounded-lg shadow-lg"></div>
+                            <div className="w-10 h-14 bg-blue-500 rounded-lg shadow-lg"></div>
                          </>
                      ) : (
                          <Icon size={48} className={isMySelection ? `text-${color}-400` : 'text-stone-500 group-hover:text-stone-300'} />
@@ -321,7 +328,7 @@ export default function App() {
                  
                  {/* Text Status */}
                  <div className="relative z-10 flex flex-col items-center">
-                     <span className={`text-3xl font-black tracking-widest ${isMySelection ? 'text-white' : 'text-stone-400 group-hover:text-stone-200'}`}>
+                     <span className={`text-2xl font-black tracking-widest ${isMySelection ? 'text-white' : 'text-stone-400 group-hover:text-stone-200'}`}>
                          {label}
                      </span>
                      
@@ -332,7 +339,7 @@ export default function App() {
                              </span>
                          ) : isMySelection ? (
                              <span className="text-[10px] font-bold text-stone-500 tracking-widest uppercase animate-pulse">
-                                 WAITING FOR {opponentName}...
+                                 WAITING...
                              </span>
                          ) : isOpponentSelection ? (
                              <span className="text-[10px] font-bold text-stone-500 tracking-widest uppercase">
@@ -353,21 +360,25 @@ export default function App() {
       };
 
       return (
-        <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-950 text-stone-100 p-6">
+        <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-950 text-stone-100 p-6 overflow-hidden">
             <div className="absolute top-4 left-4">
                  <button onClick={handleLogout} className="text-xs font-bold text-stone-600 hover:text-stone-400 flex items-center gap-1">
                     <ChevronLeft size={14} /> LOGOUT
                  </button>
             </div>
             
-            <h1 className="text-4xl font-black mb-12 tracking-tighter">SELECT GAME</h1>
+            <h1 className="text-4xl font-black mb-8 tracking-tighter">SELECT GAME</h1>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl">
-                 {renderCard('UNO', 'UNO', 'amber', null, 'from-rose-500/10 to-blue-500/10')}
-                 {renderCard('CHESS', 'CHESS', 'emerald', Spade, 'from-stone-700/10 to-white/5')}
+            <div className="w-full max-w-5xl overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-4 px-4">
+                     {renderCard('UNO', 'UNO', 'amber', null, 'from-rose-500/10 to-blue-500/10')}
+                     {renderCard('CHESS', 'CHESS', 'emerald', Spade, 'from-emerald-700/10 to-white/5')}
+                     {renderCard('MORRIS', '3 MORRIS', 'violet', Grid3x3, 'from-violet-700/10 to-fuchsia-500/5')}
+                     {renderCard('TTT_MOVE', 'TTT MOVE', 'cyan', LayoutGrid, 'from-cyan-700/10 to-teal-500/5')}
+                </div>
             </div>
             
-            <div className="mt-12 text-center text-stone-500 text-sm max-w-xs h-10 flex items-center justify-center">
+            <div className="mt-8 text-center text-stone-500 text-sm max-w-xs h-10 flex items-center justify-center">
                 {mySelection && !opponentSelection && (
                     <span className="animate-pulse">Waiting for {opponentName} to join...</span>
                 )}
@@ -389,6 +400,14 @@ export default function App() {
 
   if (activeGame === 'CHESS') {
       return <ChessGame myPlayerId={myPlayerId} onExit={handleExitGame} />;
+  }
+
+  if (activeGame === 'MORRIS') {
+      return <MorrisGame myPlayerId={myPlayerId} onExit={handleExitGame} />;
+  }
+
+  if (activeGame === 'TTT_MOVE') {
+      return <TTTMoveGame myPlayerId={myPlayerId} onExit={handleExitGame} />;
   }
 
   return <div>Loading...</div>;
