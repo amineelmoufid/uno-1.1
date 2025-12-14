@@ -7,15 +7,20 @@ const WINNING_LINES = [
     [0, 4, 8], [2, 4, 6]             // Diags
 ];
 
-export const getInitialTTTMoveState = (): TTTMoveGameState => ({
-    board: Array(9).fill(null),
-    turn: 'X',
-    phase: 'DROP',
-    piecesX: 0,
-    piecesO: 0,
-    winner: null,
-    log: "Drop Phase: X's Turn"
-});
+export const getInitialTTTMoveState = (): TTTMoveGameState => {
+    // Randomly pick X or O to start
+    const startingTurn = Math.random() < 0.5 ? 'X' : 'O';
+    
+    return {
+        board: Array(9).fill(null),
+        turn: startingTurn,
+        phase: 'DROP',
+        piecesX: 0,
+        piecesO: 0,
+        winner: null,
+        log: `Drop Phase: ${startingTurn}'s Turn`
+    };
+};
 
 const checkWin = (board: (string | null)[]): 'X' | 'O' | null => {
     for (const line of WINNING_LINES) {

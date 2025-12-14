@@ -8,7 +8,8 @@ import {
     updateGameState, 
     getGameSnapshot, 
     FIXED_ROOM_ID, 
-    subscribeToPresence 
+    incrementScore,
+    subscribeToScores
 } from '../services/firebase';
 import CardComponent from '../components/CardComponent';
 import { Trophy, Users, RefreshCw, Heart, ChevronLeft, Smile, Megaphone } from 'lucide-react';
@@ -114,11 +115,19 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
   const [unoCall, setUnoCall] = useState(false);
   const [wildPickerOpen, setWildPickerOpen] = useState(false);
   const [pendingCard, setPendingCard] = useState<Card | null>(null);
+  const [scores, setScores] = useState<{ Amine: number; Hasnae: number } | null>(null);
   
   // Reactions & Shouts
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shoutTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeToScores((data) => {
+        setScores(data?.['UNO'] || { Amine: 0, Hasnae: 0 });
+    });
+    return () => unsub();
+  }, []);
 
   const initializeRoom = async () => {
       let deck = createDeck();
@@ -302,6 +311,7 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
             log: `${p.name} won the game!`
         };
         updateGameState(FIXED_ROOM_ID, finishedState);
+        incrementScore('UNO', p.name); // Add Score
         return;
     }
     newState.players[myPlayerId!] = p;
@@ -371,6 +381,16 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
         <div className="relative z-10 flex flex-col items-center">
             <Trophy size={64} className="text-amber-400 mb-6 animate-bounce" />
             <h1 className="text-5xl font-black mb-4 tracking-tight">{gameState.winner?.name} Wins!</h1>
+            <div className="flex gap-8 mb-8 text-2xl font-bold">
+                 <div className="text-indigo-400 flex flex-col items-center">
+                     <span>AMINE</span>
+                     <span className="text-4xl">{scores?.Amine || 0}</span>
+                 </div>
+                 <div className="text-rose-400 flex flex-col items-center">
+                     <span>HASNAE</span>
+                     <span className="text-4xl">{scores?.Hasnae || 0}</span>
+                 </div>
+            </div>
             <div className="flex gap-4 mt-8">
                 <button onClick={handleResetGame} className="px-8 py-4 bg-stone-100 text-stone-900 rounded-xl font-bold hover:bg-white hover:scale-105 transition-all shadow-lg flex items-center gap-2">
                     <RefreshCw size={20}/> New Game
@@ -408,12 +428,12 @@ export default function UnoGame({ myPlayerId, onExit }: UnoGameProps) {
                 <RefreshCw size={12} /> RESTART
              </button>
              <div className="h-4 w-px bg-stone-700 mx-2"></div>
-             <div className={`w-3 h-3 rounded-full shadow-[0_0_10px_currentColor] transition-colors duration-500 ${
-                gameState.activeColor === CardColor.Red ? 'bg-rose-500 text-rose-500' :
-                gameState.activeColor === CardColor.Blue ? 'bg-blue-500 text-blue-500' :
-                gameState.activeColor === CardColor.Green ? 'bg-emerald-500 text-emerald-500' :
-                gameState.activeColor === CardColor.Yellow ? 'bg-amber-400 text-amber-400' : 'bg-stone-500 text-stone-500'
-            }`} />
+             {/* Score Display */}
+             <div className="flex items-center gap-2 text-xs font-bold text-stone-500 bg-stone-950/50 px-2 py-1 rounded border border-stone-800">
+                 <span className="text-indigo-400">A: {scores?.Amine || 0}</span>
+                 <span className="text-stone-600">|</span>
+                 <span className="text-rose-400">H: {scores?.Hasnae || 0}</span>
+             </div>
         </div>
         
         <div className="flex items-center gap-2">

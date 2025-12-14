@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { TTTMoveGameState } from '../types';
-import { updateTTTMoveState, subscribeToTTTMove, FIXED_ROOM_ID } from '../services/firebase';
+import { updateTTTMoveState, subscribeToTTTMove, FIXED_ROOM_ID, incrementScore, subscribeToScores } from '../services/firebase';
 import { getInitialTTTMoveState, performTTTAction } from '../services/tttMoveLogic';
 import { RefreshCw, Trophy, ChevronLeft, Loader2, X, Circle, Move } from 'lucide-react';
 
@@ -16,9 +16,17 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
     const [gameState, setGameState] = useState<TTTMoveGameState | null>(null);
     const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
     const [isResetting, setIsResetting] = useState(false);
+    const [scores, setScores] = useState<{ Amine: number; Hasnae: number } | null>(null);
 
     // Amine is X, Hasnae is O
     const myMark = myPlayerId === 0 ? 'X' : 'O';
+
+    useEffect(() => {
+        const unsub = subscribeToScores((data) => {
+            setScores(data?.['TTT_MOVE'] || { Amine: 0, Hasnae: 0 });
+        });
+        return () => unsub();
+    }, []);
 
     useEffect(() => {
         const unsub = subscribeToTTTMove(FIXED_ROOM_ID, (data) => {
@@ -47,6 +55,10 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
             if (gameState.phase === 'DROP') {
                 const newState = performTTTAction(gameState, { type: 'DROP', idx });
                 updateTTTMoveState(FIXED_ROOM_ID, newState);
+                
+                if (newState.winner) {
+                    incrementScore('TTT_MOVE', newState.winner === 'X' ? 'Amine' : 'Hasnae');
+                }
             } else {
                 // MOVE Phase
                 const clickedVal = gameState.board[idx];
@@ -62,6 +74,11 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
                         to: idx 
                     });
                     updateTTTMoveState(FIXED_ROOM_ID, newState);
+                    
+                    if (newState.winner) {
+                        incrementScore('TTT_MOVE', newState.winner === 'X' ? 'Amine' : 'Hasnae');
+                    }
+                    
                     setSelectedIdx(null);
                 }
             }
@@ -90,9 +107,11 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
                 </button>
                 <div className="flex flex-col items-center">
                     <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">TIC-TAC-MOVE</h1>
-                    <span className="text-[10px] text-cyan-500 font-bold tracking-widest mt-0.5">
-                        {gameState.phase === 'DROP' ? 'PHASE 1: DROP' : 'PHASE 2: MOVE'}
-                    </span>
+                     <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 mt-0.5">
+                         <span className="text-cyan-400">A: {scores?.Amine || 0}</span>
+                         <span className="text-stone-600">|</span>
+                         <span className="text-rose-400">H: {scores?.Hasnae || 0}</span>
+                     </div>
                 </div>
                 <button 
                     onClick={handleNewGame} 
@@ -110,9 +129,19 @@ export default function TTTMoveGame({ myPlayerId, onExit }: TTTMoveGameProps) {
                      <div className="absolute inset-0 z-30 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
                          <Trophy size={64} className="text-amber-400 mb-6 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]" />
                          <h2 className="text-3xl font-light tracking-widest mb-2 text-white">GAME OVER</h2>
-                         <div className="text-5xl font-black mb-10 tracking-tighter text-stone-200">
+                         <div className="text-5xl font-black mb-6 tracking-tighter text-stone-200">
                             {gameState.winner === 'X' ? 'AMINE WINS' : 'HASNAE WINS'}
                          </div>
+                         <div className="flex gap-8 mb-8 text-2xl font-bold">
+                             <div className="text-cyan-400 flex flex-col items-center">
+                                 <span>AMINE</span>
+                                 <span className="text-4xl">{scores?.Amine || 0}</span>
+                             </div>
+                             <div className="text-rose-400 flex flex-col items-center">
+                                 <span>HASNAE</span>
+                                 <span className="text-4xl">{scores?.Hasnae || 0}</span>
+                             </div>
+                        </div>
                          <button onClick={handleNewGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
                              {isResetting ? 'LOADING...' : 'PLAY AGAIN'}
                          </button>

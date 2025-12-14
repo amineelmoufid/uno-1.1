@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { MorrisGameState } from '../types';
-import { updateMorrisState, subscribeToMorris, FIXED_ROOM_ID } from '../services/firebase';
+import { updateMorrisState, subscribeToMorris, FIXED_ROOM_ID, incrementScore, subscribeToScores } from '../services/firebase';
 import { getInitialMorrisState, performMorrisAction } from '../services/morrisLogic';
 import { RefreshCw, Trophy, ChevronLeft, Loader2, Grip, Move } from 'lucide-react';
 
@@ -16,6 +16,14 @@ export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
     const [gameState, setGameState] = useState<MorrisGameState | null>(null);
     const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
     const [isResetting, setIsResetting] = useState(false);
+    const [scores, setScores] = useState<{ Amine: number; Hasnae: number } | null>(null);
+
+    useEffect(() => {
+        const unsub = subscribeToScores((data) => {
+            setScores(data?.['MORRIS'] || { Amine: 0, Hasnae: 0 });
+        });
+        return () => unsub();
+    }, []);
 
     useEffect(() => {
         const unsub = subscribeToMorris(FIXED_ROOM_ID, (data) => {
@@ -50,6 +58,10 @@ export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
             if (gameState.phase === 'PLACING') {
                 const newState = performMorrisAction(gameState, { type: 'PLACE', idx });
                 updateMorrisState(FIXED_ROOM_ID, newState);
+                
+                if (newState.winner !== null) {
+                    incrementScore('MORRIS', newState.winner === 0 ? 'Amine' : 'Hasnae');
+                }
             } else {
                 // Moving Phase
                 const clickedOwner = gameState.board[idx];
@@ -66,6 +78,11 @@ export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
                         to: idx 
                     });
                     updateMorrisState(FIXED_ROOM_ID, newState);
+                    
+                    if (newState.winner !== null) {
+                         incrementScore('MORRIS', newState.winner === 0 ? 'Amine' : 'Hasnae');
+                    }
+                    
                     setSelectedIdx(null);
                 }
             }
@@ -102,9 +119,11 @@ export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
                 </button>
                 <div className="flex flex-col items-center">
                     <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">3 MEN'S MORRIS</h1>
-                    <span className="text-[10px] text-violet-500 font-bold tracking-widest mt-0.5">
-                        {gameState.phase === 'PLACING' ? 'PHASE 1: PLACE' : 'PHASE 2: MOVE'}
-                    </span>
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 mt-0.5">
+                         <span className="text-indigo-400">A: {scores?.Amine || 0}</span>
+                         <span className="text-stone-600">|</span>
+                         <span className="text-rose-400">H: {scores?.Hasnae || 0}</span>
+                    </div>
                 </div>
                 <button 
                     onClick={handleNewGame} 
@@ -123,9 +142,19 @@ export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
                      <div className="absolute inset-0 z-30 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
                          <Trophy size={64} className="text-amber-400 mb-6 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]" />
                          <h2 className="text-3xl font-light tracking-widest mb-2 text-white">GAME OVER</h2>
-                         <div className="text-5xl font-black mb-10 tracking-tighter text-stone-200">
+                         <div className="text-5xl font-black mb-6 tracking-tighter text-stone-200">
                             {gameState.winner === 0 ? 'AMINE WINS' : 'HASNAE WINS'}
                          </div>
+                         <div className="flex gap-8 mb-8 text-2xl font-bold">
+                             <div className="text-indigo-400 flex flex-col items-center">
+                                 <span>AMINE</span>
+                                 <span className="text-4xl">{scores?.Amine || 0}</span>
+                             </div>
+                             <div className="text-rose-400 flex flex-col items-center">
+                                 <span>HASNAE</span>
+                                 <span className="text-4xl">{scores?.Hasnae || 0}</span>
+                             </div>
+                        </div>
                          <button onClick={handleNewGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
                              {isResetting ? 'LOADING...' : 'PLAY AGAIN'}
                          </button>

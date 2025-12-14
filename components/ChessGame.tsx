@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChessGameState, ChessPiece } from '../types';
-import { updateChessState, subscribeToChess, FIXED_ROOM_ID } from '../services/firebase';
+import { updateChessState, subscribeToChess, FIXED_ROOM_ID, incrementScore, subscribeToScores } from '../services/firebase';
 import { getLegalMoves, performMove } from '../services/chessLogic';
 import { RefreshCw, Trophy, ChevronLeft, Loader2 } from 'lucide-react';
 
@@ -46,10 +46,18 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
     const [selectedPos, setSelectedPos] = useState<{r: number, c: number} | null>(null);
     const [validMoves, setValidMoves] = useState<{r: number, c: number}[]>([]);
     const [isResetting, setIsResetting] = useState(false);
+    const [scores, setScores] = useState<{ Amine: number; Hasnae: number } | null>(null);
 
     const myColor = myPlayerId === 0 ? 'w' : 'b';
     const opponentName = myPlayerId === 0 ? "Hasnae" : "Amine";
     const opponentColor = myColor === 'w' ? 'b' : 'w';
+
+    useEffect(() => {
+        const unsub = subscribeToScores((data) => {
+            setScores(data?.['CHESS'] || { Amine: 0, Hasnae: 0 });
+        });
+        return () => unsub();
+    }, []);
 
     useEffect(() => {
         const unsub = subscribeToChess(FIXED_ROOM_ID, (data) => {
@@ -89,6 +97,13 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
         if (selectedPos && moveTarget) {
              const newState = performMove(gameState, selectedPos, {r, c});
              updateChessState(FIXED_ROOM_ID, newState);
+             
+             // Check winner and increment score
+             if (newState.winner && newState.winner !== 'draw') {
+                 const winnerName = newState.winner === 'w' ? 'Amine' : 'Hasnae';
+                 incrementScore('CHESS', winnerName);
+             }
+
              setSelectedPos(null);
              setValidMoves([]);
              return;
@@ -168,8 +183,14 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                 </button>
                 <div className="flex flex-col items-center">
                     <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">CHESS</h1>
-                    {gameState.inCheck && !gameState.winner && (
+                    {gameState.inCheck && !gameState.winner ? (
                          <span className="text-[10px] text-rose-500 font-bold animate-pulse tracking-widest mt-0.5">CHECK</span>
+                    ) : (
+                         <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 mt-0.5">
+                             <span className="text-indigo-400">A: {scores?.Amine || 0}</span>
+                             <span className="text-stone-600">|</span>
+                             <span className="text-rose-400">H: {scores?.Hasnae || 0}</span>
+                         </div>
                     )}
                 </div>
                 <button 
@@ -188,9 +209,19 @@ export default function ChessGame({ myPlayerId, onExit }: ChessGameProps) {
                      <div className="absolute inset-0 z-30 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
                          <Trophy size={64} className="text-amber-400 mb-6 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]" />
                          <h2 className="text-3xl font-light tracking-widest mb-2 text-white">GAME OVER</h2>
-                         <div className="text-5xl font-black mb-10 tracking-tighter text-stone-200">
+                         <div className="text-5xl font-black mb-6 tracking-tighter text-stone-200">
                             {gameState.winner === 'draw' ? 'DRAW' : gameState.winner === 'w' ? 'WHITE WINS' : 'BLACK WINS'}
                          </div>
+                          <div className="flex gap-8 mb-8 text-2xl font-bold">
+                             <div className="text-indigo-400 flex flex-col items-center">
+                                 <span>AMINE</span>
+                                 <span className="text-4xl">{scores?.Amine || 0}</span>
+                             </div>
+                             <div className="text-rose-400 flex flex-col items-center">
+                                 <span>HASNAE</span>
+                                 <span className="text-4xl">{scores?.Hasnae || 0}</span>
+                             </div>
+                        </div>
                          <button onClick={handleNewGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
                              {isResetting ? 'LOADING...' : 'PLAY AGAIN'}
                          </button>

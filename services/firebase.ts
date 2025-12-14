@@ -1,6 +1,6 @@
 
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, onValue, update, get, child, onDisconnect } from "firebase/database";
+import { getDatabase, ref, set, onValue, update, get, child, onDisconnect, runTransaction } from "firebase/database";
 import { GameState, GameType, ChessGameState, MorrisGameState, TTTMoveGameState } from "../types";
 
 const firebaseConfig = {
@@ -133,6 +133,21 @@ export const setPlayerOffline = (playerName: string) => {
 export const subscribeToPresence = (callback: (data: Record<string, boolean> | null) => void) => {
     const presenceRef = ref(db, `config/${FIXED_ROOM_ID}/presence`);
     return onValue(presenceRef, (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
+// --- Scoring ---
+
+export const incrementScore = (gameType: string, winnerName: string) => {
+    const scoreRef = ref(db, `config/${FIXED_ROOM_ID}/scores/${gameType}/${winnerName}`);
+    runTransaction(scoreRef, (currentScore) => {
+        return (currentScore || 0) + 1;
+    });
+};
+
+export const subscribeToScores = (callback: (scores: Record<string, { Amine: number, Hasnae: number }> | null) => void) => {
+    return onValue(ref(db, `config/${FIXED_ROOM_ID}/scores`), (snapshot) => {
         callback(snapshot.val());
     });
 };

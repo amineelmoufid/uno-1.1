@@ -13,13 +13,14 @@ import {
     getGameSnapshot,
     setPlayerSelection,
     subscribeToSelections,
-    resetSelections
+    resetSelections,
+    subscribeToScores
 } from './services/firebase';
 import UnoGame from './components/UnoGame';
 import ChessGame from './components/ChessGame';
 import MorrisGame from './components/MorrisGame';
 import TTTMoveGame from './components/TTTMoveGame';
-import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2, Grid3x3, LayoutGrid } from 'lucide-react';
+import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2, Grid3x3, LayoutGrid, Trophy } from 'lucide-react';
 
 const PLAYER_AMINE = { id: 0, name: "Amine" };
 const PLAYER_HASNAE = { id: 1, name: "Hasnae" };
@@ -41,6 +42,7 @@ export default function App() {
   // Game Lobby State
   const [activeGame, setActiveGame] = useState<GameType>(null);
   const [selections, setSelections] = useState<Record<string, GameType>>({});
+  const [scores, setScores] = useState<Record<string, { Amine: number, Hasnae: number }>>({});
 
   // --- Initialization & Presence ---
 
@@ -59,9 +61,13 @@ export default function App() {
           const unsubSel = subscribeToSelections((data) => {
               setSelections(data || {});
           });
+          const unsubScores = subscribeToScores((data) => {
+              setScores(data || {});
+          });
           return () => {
               unsubGame();
               unsubSel();
+              unsubScores();
           };
       }
   }, [myPlayerId]);
@@ -285,6 +291,7 @@ export default function App() {
           const isMySelection = mySelection === game;
           const isOpponentSelection = opponentSelection === game;
           const isBoth = isMySelection && isOpponentSelection;
+          const gameScore = scores[game || ''] || { Amine: 0, Hasnae: 0 };
 
           return (
              <button 
@@ -309,6 +316,15 @@ export default function App() {
                          </div>
                      </div>
                  )}
+                 
+                 {/* Score Indicator */}
+                 <div className="absolute top-4 left-4 flex gap-2">
+                     <div className="bg-stone-950/80 border border-stone-800 rounded-lg px-2 py-1 flex items-center gap-2 text-[10px] font-bold text-stone-400">
+                         <span className="text-indigo-400">A: {gameScore.Amine || 0}</span>
+                         <span className="text-stone-700">|</span>
+                         <span className="text-rose-400">H: {gameScore.Hasnae || 0}</span>
+                     </div>
+                 </div>
 
                  {/* Icon */}
                  <div className={`
