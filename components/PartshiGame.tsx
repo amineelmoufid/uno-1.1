@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PartshiGameState, PartshiPiece } from '../types';
 import { updatePartshiState, subscribeToPartshi, FIXED_ROOM_ID, incrementScore, subscribeToScores } from '../services/firebase';
 import { getInitialPartshiState, performPartshiAction } from '../services/partshiLogic';
-import { RefreshCw, Trophy, ChevronLeft, Loader2, Dices } from 'lucide-react';
+import { RefreshCw, Trophy, ChevronLeft, Loader2, Dices, Star, Shield, Play } from 'lucide-react';
 
 interface PartshiGameProps {
     myPlayerId: number; // 0 = Amine, 1 = Hasnae
@@ -12,72 +12,77 @@ interface PartshiGameProps {
 
 const PLAYER_NAMES = { 0: 'Amine', 1: 'Hasnae' };
 
-// --- SVG & Board Constants ---
-const CELL_SIZE = 6.66; // 15x15 grid, 100% / 15 = 6.66%
-const BOARD_SIZE = 15;
+// --- Professional Board Constants ---
+const BOARD_SIZE = 100; // viewBox 0 0 100 100
+const C_S = 6.66; // Cell Size (100 / 15)
 
-// Coordinate Mapping (Ludo 15x15)
-// Amine (Blue) starts bottom left (pos 0). Track runs clockwise.
-// 0 is at (6, 13) ? No, typically start is safe spot.
-// Let's define the path coordinates explicitly for 0-51.
-// 15x15 Grid. (0,0) is top-left.
-// Arms are at:
-// Top: x=6..8, y=0..5
-// Bottom: x=6..8, y=9..14
-// Left: x=0..5, y=6..8
-// Right: x=9..14, y=6..8
-
-// Path sequence (standard clockwise Ludo):
-// Starts at (1, 8) -> (5, 8) -> (6, 9) -> (6, 14) -> (8, 14) -> (8, 9) -> ...
-// Let's map indices to {x, y}
-const PATH_COORDS: {x: number, y: number}[] = [
-    // Amine Start (Blue/Bottom-Left) - Index 0
-    {x: 6, y: 13}, {x: 6, y: 12}, {x: 6, y: 11}, {x: 6, y: 10}, {x: 6, y: 9}, 
-    {x: 5, y: 8}, {x: 4, y: 8}, {x: 3, y: 8}, {x: 2, y: 8}, {x: 1, y: 8}, {x: 0, y: 8}, 
-    {x: 0, y: 7}, // Turn
-    {x: 0, y: 6}, {x: 1, y: 6}, {x: 2, y: 6}, {x: 3, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
-    {x: 6, y: 5}, {x: 6, y: 4}, {x: 6, y: 3}, {x: 6, y: 2}, {x: 6, y: 1}, {x: 6, y: 0},
-    {x: 7, y: 0}, // Turn
-    {x: 8, y: 0}, {x: 8, y: 1}, {x: 8, y: 2}, {x: 8, y: 3}, {x: 8, y: 4}, {x: 8, y: 5},
-    {x: 9, y: 6}, {x: 10, y: 6}, {x: 11, y: 6}, {x: 12, y: 6}, {x: 13, y: 6}, {x: 14, y: 6},
-    {x: 14, y: 7}, // Turn
-    {x: 14, y: 8}, {x: 13, y: 8}, {x: 12, y: 8}, {x: 11, y: 8}, {x: 10, y: 8}, {x: 9, y: 8},
-    {x: 8, y: 9}, {x: 8, y: 10}, {x: 8, y: 11}, {x: 8, y: 12}, {x: 8, y: 13}, {x: 8, y: 14},
-    {x: 7, y: 14} // Last step before loop closes
+// Track Path (52 tiles)
+const TRACK_PATH: {x: number, y: number}[] = [
+    {x:6,y:13},{x:6,y:12},{x:6,y:11},{x:6,y:10},{x:6,y:9}, // 0-4
+    {x:5,y:8},{x:4,y:8},{x:3,y:8},{x:2,y:8},{x:1,y:8},{x:0,y:8}, // 5-10
+    {x:0,y:7}, // 11
+    {x:0,y:6},{x:1,y:6},{x:2,y:6},{x:3,y:6},{x:4,y:6},{x:5,y:6}, // 12-17
+    {x:6,y:5},{x:6,y:4},{x:6,y:3},{x:6,y:2},{x:6,y:1},{x:6,y:0}, // 18-23
+    {x:7,y:0}, // 24
+    {x:8,y:0},{x:8,y:1},{x:8,y:2},{x:8,y:3},{x:8,y:4},{x:8,y:5}, // 25-30
+    {x:9,y:6},{x:10,y:6},{x:11,y:6},{x:12,y:6},{x:13,y:6},{x:14,y:6}, // 31-36
+    {x:14,y:7}, // 37
+    {x:14,y:8},{x:13,y:8},{x:12,y:8},{x:11,y:8},{x:10,y:8},{x:9,y:8}, // 38-43
+    {x:8,y:9},{x:8,y:10},{x:8,y:11},{x:8,y:12},{x:8,y:13},{x:8,y:14}, // 44-49
+    {x:7,y:14}, // 50
+    {x:6,y:14}  // 51
 ];
 
-// Home Paths
-const P0_HOME_PATH = [ {x: 7, y: 13}, {x: 7, y: 12}, {x: 7, y: 11}, {x: 7, y: 10}, {x: 7, y: 9}, {x: 7, y: 8} ]; // Amine (Bottom) -> Up
-const P1_HOME_PATH = [ {x: 7, y: 1}, {x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}, {x: 7, y: 5}, {x: 7, y: 6} ]; // Hasnae (Top) -> Down
-// Wait, P1 starts at 26 (Top-Right arm?). 
-// Index 26 in PATH_COORDS is {x: 8, y: 1} which is Top Right arm start. Correct.
+const P0_HOME = [{x:7,y:13}, {x:7,y:12}, {x:7,y:11}, {x:7,y:10}, {x:7,y:9}, {x:7,y:8}]; // Blue Up
+const P1_HOME = [{x:7,y:1}, {x:7,y:2}, {x:7,y:3}, {x:7,y:4}, {x:7,y:5}, {x:7,y:6}]; // Red Down
 
+// Safe Spots: Start squares (0, 26) + Stars (8, 13, 21, 34, 39, 47)
 const SAFE_SPOTS = [0, 8, 13, 21, 26, 34, 39, 47];
 
-const getCoord = (pos: number, playerIdx: number) => {
-    // Base
-    if (pos === -1) {
-        // Base positions visual logic handled in render
-        return { x: 0, y: 0 }; 
-    }
-    // Goal
-    if (pos === 999) {
-        return { x: 7, y: 7 };
-    }
-    // Home Path
-    if (pos >= 100) {
-        const idx = (pos >= 200 ? pos - 200 : pos - 100);
-        const path = playerIdx === 0 ? P0_HOME_PATH : P1_HOME_PATH;
-        return path[idx] || { x: 7, y: 7 };
-    }
-    // Track
-    return PATH_COORDS[pos % 52] || { x: 0, y: 0 };
+// --- 3D Dice Component ---
+const Dice3D = ({ value, rolling, onClick, disabled }: { value: number | null, rolling: boolean, onClick?: () => void, disabled?: boolean }) => {
+    // Dice dots mapping
+    const dots: Record<number, number[]> = {
+        1: [4],
+        2: [0, 8],
+        3: [0, 4, 8],
+        4: [0, 2, 6, 8],
+        5: [0, 2, 4, 6, 8],
+        6: [0, 2, 3, 5, 6, 8]
+    };
+
+    return (
+        <button 
+            onClick={onClick}
+            disabled={disabled}
+            className={`w-24 h-24 perspective-500 mx-auto transition-transform active:scale-95 ${disabled ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:scale-105'}`}
+        >
+             <div className={`
+                relative w-full h-full bg-gradient-to-br from-stone-100 to-stone-300 rounded-3xl shadow-[0_15px_30px_rgba(0,0,0,0.6)] border-b-8 border-r-2 border-stone-400
+                flex flex-wrap p-3 content-between transition-all duration-700 ease-out
+                ${rolling ? 'rotate-[720deg] scale-90 blur-sm' : 'rotate-0 scale-100'}
+                ${!disabled && !rolling ? 'animate-[pulse_3s_infinite]' : ''}
+             `}>
+                 {Array(9).fill(0).map((_, i) => (
+                     <div key={i} className="w-1/3 h-1/3 flex items-center justify-center p-0.5">
+                         {dots[rolling ? 6 : (value || 1)]?.includes(i) && (
+                             <div className="w-full h-full bg-gradient-to-br from-stone-800 to-stone-900 rounded-full shadow-inner" />
+                         )}
+                     </div>
+                 ))}
+             </div>
+        </button>
+    );
 };
 
 export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
     const [gameState, setGameState] = useState<PartshiGameState | null>(null);
     const [isResetting, setIsResetting] = useState(false);
     const [scores, setScores] = useState<{ Amine: number; Hasnae: number } | null>(null);
+    
+    // Dice Animation State
+    const [displayDice, setDisplayDice] = useState<number | null>(null);
+    const [isRolling, setIsRolling] = useState(false);
 
     useEffect(() => {
         const unsub = subscribeToScores((data) => {
@@ -91,11 +96,9 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
             if (!data) {
                 updatePartshiState(FIXED_ROOM_ID, getInitialPartshiState());
             } else {
-                // Ensure arrays
                 const safeState = { ...data };
                 if (!safeState.players) safeState.players = { 0: [], 1: [] };
-                if (!safeState.players[0]) safeState.players[0] = [];
-                if (!safeState.players[1]) safeState.players[1] = [];
+                if (safeState.winner === undefined) safeState.winner = null;
                 setGameState(safeState);
             }
             setIsResetting(false);
@@ -103,23 +106,47 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
         return () => unsub();
     }, []);
 
+    // Handle Dice Animation Logic
+    useEffect(() => {
+        if (gameState?.dice) {
+            if (gameState.dice !== displayDice) {
+                // New dice value detected
+                setIsRolling(true);
+                const timer = setTimeout(() => {
+                    setDisplayDice(gameState.dice);
+                    setIsRolling(false);
+                }, 600); // Animation duration
+                return () => clearTimeout(timer);
+            }
+        } else {
+            // Reset logic
+            if (displayDice !== null) setDisplayDice(null);
+        }
+    }, [gameState?.dice]);
+
     const handleAction = (action: { type: 'ROLL' } | { type: 'MOVE', pieceId: number }) => {
         if (!gameState) return;
+        
+        if (action.type === 'ROLL') {
+            setIsRolling(true); // Immediate feedback
+        }
+
         try {
             const newState = performPartshiAction(gameState, action);
             updatePartshiState(FIXED_ROOM_ID, newState);
-            
             if (newState.winner !== null) {
                 incrementScore('PARTSHI', newState.winner === 0 ? 'Amine' : 'Hasnae');
             }
         } catch (e) {
-            console.log("Action failed:", e);
+            console.log("Action blocked:", e);
+            if (action.type === 'ROLL') setIsRolling(false); // Revert if failed
         }
     };
 
     const handleNewGame = async () => {
         if (isResetting) return;
         setIsResetting(true);
+        setDisplayDice(null);
         await updatePartshiState(FIXED_ROOM_ID, getInitialPartshiState());
     };
 
@@ -127,129 +154,78 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
 
     const isMyTurn = gameState.turn === myPlayerId;
     const canRoll = isMyTurn && gameState.canRoll;
-    const canMove = isMyTurn && !gameState.canRoll && gameState.dice !== null;
 
-    // --- Render Board ---
-    
-    // Draw Grid
-    const renderGrid = () => {
-        const rects = [];
-        // Draw track squares
-        for(let i=0; i<52; i++) {
-            const {x, y} = PATH_COORDS[i];
-            const isSafe = SAFE_SPOTS.includes(i);
-            const isStart0 = i === 0;
-            const isStart1 = i === 26;
-            
-            let color = 'fill-stone-800 stroke-stone-900';
-            if (isStart0) color = 'fill-indigo-900/50 stroke-indigo-500';
-            if (isStart1) color = 'fill-rose-900/50 stroke-rose-500';
-            if (isSafe && !isStart0 && !isStart1) color = 'fill-stone-700 stroke-stone-600';
-
-            rects.push(
-                <rect key={`track-${i}`} x={`${x*CELL_SIZE}%`} y={`${y*CELL_SIZE}%`} width={`${CELL_SIZE}%`} height={`${CELL_SIZE}%`} className={`stroke-[0.5] ${color}`} />
-            );
-            if (isSafe) {
-                rects.push(
-                    <text key={`safe-${i}`} x={`${(x+0.5)*CELL_SIZE}%`} y={`${(y+0.65)*CELL_SIZE}%`} fontSize="2.5%" textAnchor="middle" className="fill-stone-500/50 pointer-events-none">★</text>
-                );
-            }
+    // Helpers
+    const getPieceCoord = (p: PartshiPiece, playerIdx: number) => {
+        if (p.position === -1) {
+            // Base Positions
+            const baseX = playerIdx === 0 ? 1.5 : 10.5;
+            const baseY = playerIdx === 0 ? 10.5 : 1.5;
+            const offsetX = (p.id % 2) * 2;
+            const offsetY = Math.floor(p.id / 2) * 2;
+            return { x: baseX + offsetX, y: baseY + offsetY };
         }
-
-        // Home Paths
-        P0_HOME_PATH.forEach((c, i) => {
-             rects.push(<rect key={`hp0-${i}`} x={`${c.x*CELL_SIZE}%`} y={`${c.y*CELL_SIZE}%`} width={`${CELL_SIZE}%`} height={`${CELL_SIZE}%`} className="fill-indigo-500/20 stroke-indigo-500/50 stroke-[0.5]" />);
-        });
-        P1_HOME_PATH.forEach((c, i) => {
-             rects.push(<rect key={`hp1-${i}`} x={`${c.x*CELL_SIZE}%`} y={`${c.y*CELL_SIZE}%`} width={`${CELL_SIZE}%`} height={`${CELL_SIZE}%`} className="fill-rose-500/20 stroke-rose-500/50 stroke-[0.5]" />);
-        });
-
-        // Center Goal
-        rects.push(
-            <polygon key="center" points={`${6*CELL_SIZE},${6*CELL_SIZE} ${9*CELL_SIZE},${6*CELL_SIZE} ${9*CELL_SIZE},${9*CELL_SIZE} ${6*CELL_SIZE},${9*CELL_SIZE}`} className="fill-stone-800 stroke-stone-700" />
-        );
-        // Triangles in center
-        rects.push(<polygon key="c-tri-0" points={`${6*CELL_SIZE},${9*CELL_SIZE} ${9*CELL_SIZE},${9*CELL_SIZE} ${7.5*CELL_SIZE},${7.5*CELL_SIZE}`} className="fill-indigo-500/30" />); // Bottom (Amine)
-        rects.push(<polygon key="c-tri-1" points={`${6*CELL_SIZE},${6*CELL_SIZE} ${9*CELL_SIZE},${6*CELL_SIZE} ${7.5*CELL_SIZE},${7.5*CELL_SIZE}`} className="fill-rose-500/30" />); // Top (Hasnae)
-
-        return rects;
+        if (p.position === 999) {
+            // Center Triangle Goal
+            return { x: 7.5, y: 7.5 }; 
+        }
+        if (p.position >= 100) {
+            // Home Path
+            const idx = p.position >= 200 ? p.position - 200 : p.position - 100;
+            const path = playerIdx === 0 ? P0_HOME : P1_HOME;
+            return path[Math.min(idx, 5)] || {x:7, y:7};
+        }
+        // Main Track
+        return TRACK_PATH[p.position % 52] || {x:0,y:0};
     };
 
-    // Render Pieces
-    const renderPieces = () => {
-        const els = [];
+    // Calculate Stack Offsets
+    const getStackOffsets = () => {
+        type RenderPiece = PartshiPiece & { pl: number };
+        const counts: Record<string, RenderPiece[]> = {};
+        const offsets: Record<string, {x:number, y:number}> = {};
 
-        // Combine all pieces
-        const p0 = gameState.players[0] || [];
-        const p1 = gameState.players[1] || [];
+        if (!gameState) return {};
 
-        // Group pieces by position to handle stacking
-        const posMap: Record<string, (PartshiPiece & { player: number })[]> = {};
+        const all: RenderPiece[] = [...(gameState.players[0]||[]).map(p=>({...p, pl:0})), ...(gameState.players[1]||[]).map(p=>({...p, pl:1}))];
         
-        [...p0.map(p => ({...p, player: 0})), ...p1.map(p => ({...p, player: 1}))].forEach(p => {
-             const key = `${p.player}-${p.position}`;
-             if (!posMap[key]) posMap[key] = [];
-             posMap[key].push(p);
+        all.forEach(p => {
+             const key = p.position === -1 ? `base-${p.pl}-${p.id}` : 
+                         p.position === 999 ? `goal` : 
+                         `pos-${p.position}`;
+             
+             if (!counts[key]) counts[key] = [];
+             counts[key].push(p);
         });
 
-        // Base Offsets
-        const getBaseXY = (player: number, id: number) => {
-            // Amine Base: Bottom Left (0-5, 9-14)
-            // Hasnae Base: Top Right (9-14, 0-5)
-            // Let's put visual bases in corners 
-            // Amine: x:1-4, y:10-13
-            // Hasnae: x:10-13, y:1-4
+        all.forEach(p => {
+            const key = p.position === -1 ? `base-${p.pl}-${p.id}` : p.position === 999 ? `goal` : `pos-${p.position}`;
+            const stack = counts[key];
+            const idx = stack.findIndex(x => x.id === p.id && x.pl === p.pl);
+            const count = stack.length;
             
-            const baseX = player === 0 ? 1.5 : 10.5;
-            const baseY = player === 0 ? 10.5 : 1.5;
-            
-            const offsetX = (id % 2) * 2;
-            const offsetY = Math.floor(id / 2) * 2;
-            
-            return { x: baseX + offsetX, y: baseY + offsetY };
-        };
+            if (p.position === -1) {
+                offsets[`${p.pl}-${p.id}`] = {x:0, y:0};
+            } else if (p.position === 999) {
+                 const angle = (idx / count) * Math.PI * 2;
+                 offsets[`${p.pl}-${p.id}`] = { x: Math.cos(angle) * 0.5, y: Math.sin(angle) * 0.5 };
+            } else if (count > 1) {
+                offsets[`${p.pl}-${p.id}`] = { x: (idx * 0.3) - (count * 0.15), y: -(idx * 0.3) };
+            } else {
+                offsets[`${p.pl}-${p.id}`] = {x:0, y:0};
+            }
+        });
+        return offsets;
+    };
 
-        const allPieces = [...p0.map(p => ({...p, player: 0})), ...p1.map(p => ({...p, player: 1}))];
+    const offsets = getStackOffsets();
 
-        for(const piece of allPieces) {
-             let x, y;
-             if (piece.position === -1) {
-                 const c = getBaseXY(piece.player, piece.id);
-                 x = c.x; y = c.y;
-             } else {
-                 const c = getCoord(piece.position, piece.player);
-                 x = c.x; y = c.y;
-             }
-
-             // Handle Stacking (Simple offset)
-             const stack = allPieces.filter(op => op.position === piece.position && op.player === piece.player && op.position !== -1);
-             const stackIdx = stack.findIndex(op => op.id === piece.id);
-             if (stack.length > 1 && piece.position !== -1) {
-                 x += (stackIdx * 0.2) - (stack.length * 0.1);
-                 y -= (stackIdx * 0.2); 
-             }
-
-             const isSelectable = canMove && piece.player === myPlayerId;
-             const colorClass = piece.player === 0 
-                ? 'fill-indigo-500 stroke-indigo-300' 
-                : 'fill-rose-500 stroke-rose-300';
-             
-             els.push(
-                 <circle
-                    key={`p-${piece.player}-${piece.id}`}
-                    cx={`${(x + 0.5) * CELL_SIZE}%`}
-                    cy={`${(y + 0.5) * CELL_SIZE}%`}
-                    r={`${CELL_SIZE * 0.35}%`}
-                    className={`
-                        transition-all duration-300 stroke-2 drop-shadow-md
-                        ${colorClass}
-                        ${isSelectable ? 'cursor-pointer hover:stroke-white animate-pulse' : ''}
-                    `}
-                    onClick={() => isSelectable && handleAction({ type: 'MOVE', pieceId: piece.id })}
-                 />
-             );
-        }
-        return els;
+    const isMoveValid = (piece: PartshiPiece) => {
+        if (!isMyTurn || gameState.canRoll || !gameState.dice) return false;
+        try {
+            if (piece.position === -1 && gameState.dice !== 6) return false;
+            return true;
+        } catch { return false; }
     };
 
     return (
@@ -260,7 +236,7 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
                     <ChevronLeft size={16} /> LOBBY
                 </button>
                 <div className="flex flex-col items-center">
-                    <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">PARTSHI</h1>
+                    <h1 className="font-bold text-sm tracking-[0.3em] text-stone-400">PARTSHI PRO</h1>
                     <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 mt-0.5">
                          <span className="text-indigo-400">A: {scores?.Amine || 0}</span>
                          <span className="text-stone-600">|</span>
@@ -273,7 +249,7 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
                     className="text-xs font-bold text-stone-500 hover:text-stone-300 flex items-center gap-2 border border-stone-800 bg-stone-900 px-3 py-1.5 rounded hover:bg-stone-800 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isResetting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} 
-                    <span className="hidden sm:inline">{isResetting ? 'RESETTING' : 'NEW GAME'}</span>
+                    <span className="hidden sm:inline">{isResetting ? 'RESETTING' : 'RESET'}</span>
                 </button>
             </div>
 
@@ -281,98 +257,204 @@ export default function PartshiGame({ myPlayerId, onExit }: PartshiGameProps) {
             <div className="flex-1 flex flex-col items-center justify-center relative p-4">
                 
                 {/* Winner Overlay */}
-                {gameState.winner !== null && (
-                     <div className="absolute inset-0 z-30 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center animate-in fade-in zoom-in duration-300">
-                         <Trophy size={64} className="text-amber-400 mb-6 drop-shadow-[0_0_15px_rgba(251,191,36,0.5)]" />
-                         <h2 className="text-3xl font-light tracking-widest mb-2 text-white">GAME OVER</h2>
-                         <div className="text-5xl font-black mb-6 tracking-tighter text-stone-200">
-                            {gameState.winner === 0 ? 'AMINE WINS' : 'HASNAE WINS'}
+                {typeof gameState.winner === 'number' && (
+                     <div className="absolute inset-0 z-50 bg-stone-950/90 backdrop-blur-md flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
+                         <div className="relative">
+                             <div className="absolute inset-0 bg-amber-500 blur-3xl opacity-20 animate-pulse"></div>
+                             <Trophy size={80} className="text-amber-400 mb-6 drop-shadow-[0_0_25px_rgba(251,191,36,0.6)] relative z-10" />
                          </div>
-                         <div className="flex gap-8 mb-8 text-2xl font-bold">
-                             <div className="text-indigo-400 flex flex-col items-center">
-                                 <span>AMINE</span>
-                                 <span className="text-4xl">{scores?.Amine || 0}</span>
-                             </div>
-                             <div className="text-rose-400 flex flex-col items-center">
-                                 <span>HASNAE</span>
-                                 <span className="text-4xl">{scores?.Hasnae || 0}</span>
-                             </div>
-                        </div>
-                         <button onClick={handleNewGame} className="bg-stone-100 hover:bg-white text-stone-950 px-10 py-4 rounded-full font-bold tracking-widest shadow-xl transition-all hover:scale-105 active:scale-95">
-                             {isResetting ? 'LOADING...' : 'PLAY AGAIN'}
+                         <h2 className="text-4xl font-light tracking-[0.2em] mb-4 text-white uppercase">Victory</h2>
+                         <div className={`text-6xl font-black mb-8 tracking-tighter ${gameState.winner === 0 ? 'text-indigo-400' : 'text-rose-400'}`}>
+                            {gameState.winner === 0 ? 'AMINE' : 'HASNAE'}
+                         </div>
+                         <button onClick={handleNewGame} className="bg-white text-stone-950 px-12 py-4 rounded-full font-bold tracking-widest shadow-2xl transition-all hover:scale-105 active:scale-95 hover:bg-stone-100">
+                             PLAY AGAIN
                          </button>
                      </div>
                 )}
 
-                {/* Opponent Info */}
-                <div className={`w-full max-w-[400px] mb-4 flex justify-between items-center opacity-90 transition-opacity ${!isMyTurn ? 'opacity-100' : 'opacity-50'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg ${myPlayerId === 0 ? 'bg-rose-600' : 'bg-indigo-500'} text-white`}>
+                {/* Opponent HUD */}
+                <div className={`w-full max-w-[420px] mb-2 flex justify-between items-center transition-opacity duration-300 ${!isMyTurn ? 'opacity-100' : 'opacity-40 grayscale'}`}>
+                    <div className="flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold shadow-lg border-2 ${myPlayerId === 0 ? 'bg-rose-900/20 border-rose-500/50 text-rose-500' : 'bg-indigo-900/20 border-indigo-500/50 text-indigo-500'}`}>
                             {PLAYER_NAMES[myPlayerId === 0 ? 1 : 0][0]}
                         </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold tracking-wider text-stone-300">{PLAYER_NAMES[myPlayerId === 0 ? 1 : 0]}</span>
-                            <span className="text-[10px] font-mono text-stone-500 uppercase">
-                                {!isMyTurn ? 'Rolling...' : 'Waiting'}
-                            </span>
+                        <div>
+                            <div className="text-xs font-bold text-stone-400 tracking-wider">OPPONENT</div>
+                            <div className="text-sm font-bold text-stone-200">{PLAYER_NAMES[myPlayerId === 0 ? 1 : 0]}</div>
                         </div>
                     </div>
-                    {/* Opponent Last Roll Display */}
-                    {gameState.turn !== myPlayerId && gameState.dice && (
-                        <div className="flex items-center gap-2 bg-stone-800 px-3 py-1 rounded-lg">
-                            <Dices size={16} className="text-stone-400"/>
-                            <span className="text-xl font-bold text-white">{gameState.dice}</span>
-                        </div>
-                    )}
                 </div>
 
-                {/* BOARD */}
-                <div className="relative w-full aspect-square max-w-[400px] bg-stone-900 rounded-xl shadow-2xl overflow-hidden border border-stone-800">
+                {/* --- BOARD SVG --- */}
+                <div className="relative w-full aspect-square max-w-[420px] bg-[#1a1918] rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden border-8 border-stone-800 select-none">
                     <svg className="w-full h-full" viewBox="0 0 100 100">
-                        {/* Base Areas */}
-                        <rect x="0" y="60" width="40" height="40" className="fill-indigo-900/20" /> {/* Amine Base Area */}
-                        <rect x="60" y="0" width="40" height="40" className="fill-rose-900/20" /> {/* Hasnae Base Area */}
+                        <defs>
+                            <pattern id="grid" width="6.66" height="6.66" patternUnits="userSpaceOnUse">
+                                <path d="M 6.66 0 L 0 0 0 6.66" fill="none" stroke="#222" strokeWidth="0.1"/>
+                            </pattern>
+                            <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stopColor="#2a2928" />
+                                <stop offset="50%" stopColor="#1c1b1a" />
+                                <stop offset="100%" stopColor="#2a2928" />
+                            </linearGradient>
+                            <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                                <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                             <filter id="glow-red" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                                <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                            </filter>
+                        </defs>
+
+                        {/* Background */}
+                        <rect width="100%" height="100%" fill="url(#metal)" />
+                        <rect width="100%" height="100%" fill="url(#grid)" />
+
+                        {/* Bases (Prisons) */}
+                        <rect x="0" y="60" width="40" height="40" className="fill-indigo-950/30 stroke-indigo-900/20 stroke-1" rx="4" />
+                        <rect x="60" y="0" width="40" height="40" className="fill-rose-950/30 stroke-rose-900/20 stroke-1" rx="4" />
                         
-                        {renderGrid()}
-                        {renderPieces()}
+                        {/* Base Labels */}
+                        <text x="20" y="80" textAnchor="middle" className="fill-indigo-500/20 font-black text-[5px] tracking-[0.3em]">AMINE</text>
+                        <text x="80" y="20" textAnchor="middle" className="fill-rose-500/20 font-black text-[5px] tracking-[0.3em]">HASNAE</text>
+
+                        {/* Track Path */}
+                        {TRACK_PATH.map((c, i) => {
+                            const isSafe = SAFE_SPOTS.includes(i);
+                            const isStartP0 = i === 0;
+                            const isStartP1 = i === 26;
+                            
+                            let fill = '#232221';
+                            let stroke = '#333';
+
+                            if (isStartP0) { fill = 'rgba(99, 102, 241, 0.15)'; stroke = '#4f46e5'; }
+                            else if (isStartP1) { fill = 'rgba(244, 63, 94, 0.15)'; stroke = '#e11d48'; }
+                            else if (isSafe) { fill = '#2d2b29'; stroke = '#444'; }
+
+                            return (
+                                <g key={`sq-${i}`}>
+                                    <rect 
+                                        x={c.x * C_S} y={c.y * C_S} 
+                                        width={C_S} height={C_S} 
+                                        fill={fill} stroke={stroke} strokeWidth="0.3"
+                                    />
+                                    {isSafe && !isStartP0 && !isStartP1 && (
+                                        <g transform={`translate(${(c.x * C_S) + 3.33}, ${(c.y * C_S) + 3.33})`}>
+                                            <Star size={3.5} className="text-stone-600/30" fill="currentColor" stroke="none" transform="translate(-1.75, -1.75)" />
+                                        </g>
+                                    )}
+                                    {isStartP0 && <text x={(c.x+0.5)*C_S} y={(c.y+0.65)*C_S} fontSize="2.5" fill="#6366f1" textAnchor="middle" fontWeight="bold">START</text>}
+                                    {isStartP1 && <text x={(c.x+0.5)*C_S} y={(c.y+0.65)*C_S} fontSize="2.5" fill="#f43f5e" textAnchor="middle" fontWeight="bold">START</text>}
+                                </g>
+                            );
+                        })}
+
+                        {/* Home Paths (Chevron Arrows) */}
+                        {P0_HOME.map((c, i) => (
+                             <path 
+                                key={`hp0-${i}`}
+                                d={`M ${c.x*C_S} ${(c.y+1)*C_S} L ${(c.x+0.5)*C_S} ${c.y*C_S} L ${(c.x+1)*C_S} ${(c.y+1)*C_S} L ${(c.x+1)*C_S} ${(c.y+0.2)*C_S + C_S} L ${(c.x+0.5)*C_S} ${(c.y+0.2)*C_S} L ${c.x*C_S} ${(c.y+0.2)*C_S + C_S} Z`}
+                                className="fill-indigo-500/20 stroke-indigo-500/30 stroke-[0.2]"
+                             />
+                        ))}
+                        {P1_HOME.map((c, i) => (
+                             <path 
+                                key={`hp1-${i}`}
+                                d={`M ${c.x*C_S} ${c.y*C_S} L ${(c.x+0.5)*C_S} ${(c.y+1)*C_S} L ${(c.x+1)*C_S} ${c.y*C_S} L ${(c.x+1)*C_S} ${(c.y-0.2)*C_S} L ${(c.x+0.5)*C_S} ${(c.y+0.8)*C_S} L ${c.x*C_S} ${(c.y-0.2)*C_S} Z`}
+                                className="fill-rose-500/20 stroke-rose-500/30 stroke-[0.2]"
+                             />
+                        ))}
+
+                        {/* Center Goal */}
+                        <polygon points="40,40 60,40 60,60 40,60" className="fill-stone-900 stroke-stone-700" />
+                        <polygon points="40,60 60,60 50,50" className="fill-indigo-500/40" />
+                        <polygon points="60,40 40,40 50,50" className="fill-rose-500/40" />
+                        <circle cx="50" cy="50" r="1.5" className="fill-stone-800 stroke-stone-600" />
+
+                        {/* Pieces */}
+                        {Object.entries(offsets).map(([key, offset]) => {
+                            const [plStr, idStr] = key.split('-');
+                            const player = parseInt(plStr);
+                            const id = parseInt(idStr);
+                            const p = gameState.players[player as 0|1].find(px => px.id === id);
+                            if (!p) return null;
+
+                            const coord = getPieceCoord(p, player);
+                            const isValid = isMoveValid(p);
+                            
+                            // Visuals
+                            const color = player === 0 ? '#6366f1' : '#f43f5e'; 
+                            const strokeColor = player === 0 ? '#818cf8' : '#fb7185';
+                            const glowId = player === 0 ? 'url(#glow-blue)' : 'url(#glow-red)';
+
+                            // Animation coords
+                            const cx = (coord.x + 0.5) * C_S + (offset.x * C_S);
+                            const cy = (coord.y + 0.5) * C_S + (offset.y * C_S);
+
+                            return (
+                                <g 
+                                    key={key} 
+                                    className={`transition-all duration-500 ease-out`} 
+                                    style={{ transformOrigin: `${cx}% ${cy}%`, transitionProperty: 'cx, cy' }}
+                                    onClick={() => isValid && handleAction({ type: 'MOVE', pieceId: p.id })}
+                                >
+                                    {/* Ripple Effect for Valid Moves */}
+                                    {isValid && (
+                                        <circle cx={cx} cy={cy} r={C_S * 0.7} fill="none" stroke={color} strokeWidth="0.4" className="animate-ping opacity-60" />
+                                    )}
+                                    
+                                    {/* The Piece */}
+                                    <circle 
+                                        cx={cx} cy={cy} 
+                                        r={C_S * 0.35} 
+                                        fill={color} 
+                                        stroke={strokeColor} 
+                                        strokeWidth="0.5"
+                                        filter={isValid ? glowId : 'drop-shadow(0 2px 3px rgba(0,0,0,0.5))'}
+                                        className={`
+                                            transition-all duration-300
+                                            ${isValid ? 'cursor-pointer' : ''}
+                                        `}
+                                    />
+                                    {/* Inner Detail */}
+                                    <circle cx={cx} cy={cy} r={C_S * 0.15} fill="rgba(255,255,255,0.2)" />
+                                </g>
+                            );
+                        })}
+
                     </svg>
                 </div>
 
-                {/* Controls & My Info */}
-                <div className={`w-full max-w-[400px] mt-6 flex justify-between items-center opacity-90 transition-opacity ${isMyTurn ? 'opacity-100' : 'opacity-50'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold shadow-lg ${myPlayerId === 0 ? 'bg-indigo-500' : 'bg-rose-600'} text-white`}>
+                {/* Controls Area */}
+                <div className={`w-full max-w-[420px] mt-6 flex justify-between items-center transition-all duration-500 ${isMyTurn ? 'opacity-100 translate-y-0' : 'opacity-40 translate-y-2 grayscale'}`}>
+                    <div className="flex items-center gap-4">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg border-2 ${myPlayerId === 0 ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-rose-600 border-rose-400 text-white'}`}>
                             {PLAYER_NAMES[myPlayerId][0]}
                         </div>
-                        <div className="flex flex-col">
-                            <span className="text-sm font-bold tracking-wider text-stone-300">YOU</span>
-                            <span className="text-[10px] font-mono text-stone-500 uppercase font-bold text-nowrap">
-                                {isMyTurn ? (gameState.canRoll ? 'Your Turn' : 'Move Piece') : ''}
-                            </span>
+                        <div>
+                             <div className="text-xs font-bold text-stone-400 tracking-wider">YOU</div>
+                             <div className="text-sm font-bold text-white uppercase flex items-center gap-2">
+                                 {isMyTurn ? (canRoll ? 'ROLL DICE' : 'MOVE PIECE') : 'WAITING...'}
+                                 {isMyTurn && <span className="flex w-2 h-2 bg-green-500 rounded-full animate-pulse"/>}
+                             </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        {/* Dice */}
-                        <div className="flex flex-col items-center">
-                            {gameState.dice !== null && (
-                                <div className="text-3xl font-black text-stone-200 mb-1 drop-shadow-lg">
-                                    {gameState.dice}
-                                </div>
-                            )}
-                            <button
-                                onClick={() => handleAction({ type: 'ROLL' })}
-                                disabled={!canRoll}
-                                className={`
-                                    flex items-center gap-2 px-6 py-3 rounded-xl font-bold tracking-widest transition-all shadow-lg
-                                    ${canRoll 
-                                        ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-stone-900 hover:scale-105 active:scale-95 hover:brightness-110' 
-                                        : 'bg-stone-800 text-stone-600 cursor-not-allowed'}
-                                `}
-                            >
-                                <Dices size={20} /> ROLL
-                            </button>
-                        </div>
+                    <div className="flex flex-col items-center gap-4">
+                        <Dice3D 
+                            value={displayDice || 1} 
+                            rolling={isRolling} 
+                            onClick={() => canRoll && handleAction({ type: 'ROLL' })}
+                            disabled={!canRoll}
+                        />
+                        
+                        {!canRoll && isMyTurn && (
+                            <div className="text-[10px] font-bold text-stone-500 animate-pulse tracking-widest">
+                                SELECT PIECE TO MOVE
+                            </div>
+                        )}
                     </div>
                 </div>
 

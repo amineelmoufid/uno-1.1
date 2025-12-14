@@ -8,6 +8,9 @@ const P1_START = 26;
 const P0_HOME_ENTRY = 50; // Last square before home
 const P1_HOME_ENTRY = 24; // Last square before home
 
+// Standard Ludo Safe Spots
+const SAFE_SPOTS = [0, 8, 13, 21, 26, 34, 39, 47];
+
 // Helper: Get next position
 const getNextPosition = (currentPos: number, steps: number, playerIndex: number): number => {
     // 1. If in Base (-1)
@@ -27,36 +30,56 @@ const getNextPosition = (currentPos: number, steps: number, playerIndex: number)
         
         if (target === 6) return 999; // Goal!
         if (target < 6) return offset + target;
-        return currentPos; // Bounce or stay? Usually stay if exact roll needed. We'll say stay.
+        return currentPos; // Move invalid if overshooting
     }
 
     // 4. Main Track
     // Check if we pass the home entry
-    const entryPoint = playerIndex === 0 ? P0_HOME_ENTRY : P1_HOME_ENTRY;
+    // P0 goes 0->50, then home. P1 goes 26->51->0->24, then home.
     
-    // We need to calculate distance to entry point considering wrap-around
-    let distanceToEntry = -1;
+    // Distance calculation logic
+    let effectivePos = currentPos;
+    let entryPos = playerIndex === 0 ? P0_HOME_ENTRY : P1_HOME_ENTRY;
+    
+    // Handle wrap around for distance calc
+    let distanceToEntry: number;
+    
     if (playerIndex === 0) {
-        // Simple case: 0 to 50
-        if (currentPos <= P0_HOME_ENTRY) distanceToEntry = P0_HOME_ENTRY - currentPos;
-        // Else passed? Should not happen if logic is correct
+        // Amine: 0 -> 50. simple.
+        distanceToEntry = P0_HOME_ENTRY - currentPos;
     } else {
-        // 26...51...0...24
-        if (currentPos >= P1_START) {
-            distanceToEntry = (TRACK_LENGTH - currentPos) + P1_HOME_ENTRY; 
+        // Hasnae: 26 -> 51 -> 0 -> 24
+        if (currentPos >= P1_START) { // 26 to 51
+             // Dist to 51 + (0 to 24) + 1 step for 51->0 transition
+             distanceToEntry = (TRACK_LENGTH - 1 - currentPos) + 1 + P1_HOME_ENTRY;
         } else {
-            distanceToEntry = P1_HOME_ENTRY - currentPos;
+             // 0 to 24
+             distanceToEntry = P1_HOME_ENTRY - currentPos;
         }
     }
 
+    // Important: A player can only enter home if they have traversed the board. 
+    // Since we don't track laps, we rely on the position check.
+    // If distance is negative, it means we already passed it? No, circular logic handles it.
+    // However, we must ensure P1 doesn't enter home immediately if they are at e.g. 23 (unlikely as they start at 26).
+    // But logically, if P1 is at 23, they have almost finished a lap.
+    
     if (steps > distanceToEntry) {
-        // Entering Home Path
-        const remainingSteps = steps - distanceToEntry - 1; // -1 to step INTO the first home square
-        if (remainingSteps >= 6) return currentPos; // Too far? Unlikely with 1 die
-        return (playerIndex === 0 ? 100 : 200) + remainingSteps;
+         // Potential home entry
+         // The step ONTO the entry point uses 1 distance. 
+         // Example: At 50 (Entry), roll 1 -> Home Path 0 (Index 100). 
+         // distanceToEntry is 0. steps 1. 1 > 0.
+         // remaining = 1 - 0 - 1 = 0. Correct.
+         
+         const remaining = steps - distanceToEntry - 1;
+         if (remaining < 6) {
+             return (playerIndex === 0 ? 100 : 200) + remaining;
+         }
+         // Overshoot home path entry? Stay put.
+         return currentPos;
     }
 
-    // Normal Move
+    // Normal Move (Wrap around 52)
     return (currentPos + steps) % TRACK_LENGTH;
 };
 
@@ -98,22 +121,18 @@ export const performPartshiAction = (
         });
 
         if (!canMove) {
-            // Skip turn
             newState.log += " - No moves!";
-            // Delay turn switch slightly for UI? No, logic handles state.
-            // If roll was 6, do they get to roll again even if no move? 
-            // Usually yes, but if no pieces on board and 6, can't move. 
-            // Let's simplified: 6 gives roll again ONLY if you moved? 
-            // Standard: 6 gives another roll. If you can't move, you pass, but if it was 6, do you roll again?
-            // Let's say: If no move possible, turn ends immediately, UNLESS it was a 6.
+            // 6 gives another roll usually, but if blocked completely? 
+            // Standard rules: If 6, roll again. If not 6 and no moves, pass.
             
             if (roll !== 6) {
+                // Delay turn switch slightly in UI usually, but here immediate state update
                 newState.turn = playerIdx === 0 ? 1 : 0;
                 newState.dice = null;
                 newState.canRoll = true;
             } else {
-                 newState.canRoll = true; // Roll again
-                 newState.log += " (Roll again)";
+                 newState.canRoll = true; 
+                 newState.log += " (Roll 6 again)";
             }
         }
     } else {
@@ -136,24 +155,33 @@ export const performPartshiAction = (
         }
 
         // Check collisions (Capturing)
-        // If landing on opponent piece, send them to base (-1)
-        // Note: Safe spots usually prevent capture. We'll ignore safe spots for simplicity OR add them.
-        // Let's add simple capture. 
         if (nextPos < 100 && nextPos >= 0) { // Only on main track
             const opponentIdx = playerIdx === 0 ? 1 : 0;
             const opponentPieces = newState.players[opponentIdx];
-            const victim = opponentPieces.find(p => p.position === nextPos);
             
-            if (victim) {
-                // Safe spot check? 
-                // Safe spots: 0, 8, 13, 21, 26, 34, 39, 47
-                const isSafe = [0, 8, 13, 21, 26, 34, 39, 47].includes(nextPos);
+            // Is it a safe spot?
+            const isSafe = SAFE_SPOTS.includes(nextPos);
+            
+            // Find victim
+            const victimIndex = opponentPieces.findIndex(p => p.position === nextPos);
+            
+            if (victimIndex !== -1) {
                 if (!isSafe) {
-                    victim.position = -1; // Send to base
-                    newState.log += ` - Captured!`;
+                    // Capture!
+                    opponentPieces[victimIndex].position = -1;
+                    newState.log = "Captured Opponent!";
+                    // Bonus roll for capture? Standard rules often say yes. Let's keep it simple for now or give bonus.
+                    // Let's grant a bonus roll for capturing.
+                    newState.dice = 6; // Hack: Force a 6-like behavior (canRoll=true) without changing number? 
+                    // Better: Just set canRoll = true and keep turn.
+                    newState.canRoll = true; 
+                    newState.log += " Roll again!";
+                    
+                    piece.position = nextPos; // Complete move
+                    // We return here to skip the normal turn switching logic below
+                    return newState; 
                 } else {
-                    // Safe spot: Blocks? Or Stack?
-                    // Simplified: Just stack. No capture.
+                    // Safe Spot: Co-exist (Stacking handled by UI)
                 }
             }
         }
@@ -161,7 +189,7 @@ export const performPartshiAction = (
         piece.position = nextPos;
 
         // Check Win
-        if (pieces.every(p => p.position === 999)) {
+        if (pieces.length > 0 && pieces.every(p => p.position === 999)) {
             newState.winner = playerIdx;
             newState.log = `${playerIdx === 0 ? 'Amine' : 'Hasnae'} Wins!`;
             return newState;
@@ -169,8 +197,8 @@ export const performPartshiAction = (
 
         // Turn Logic
         if (newState.dice === 6) {
-            newState.canRoll = true; // Roll again
-            newState.log = "Moved. Roll again!";
+            newState.canRoll = true; 
+            newState.log = "Rolled 6. Roll again!";
         } else {
             newState.turn = playerIdx === 0 ? 1 : 0;
             newState.dice = null;
