@@ -1,7 +1,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, update, get, child, onDisconnect, runTransaction } from "firebase/database";
-import { GameState, GameType, ChessGameState, MorrisGameState, TTTMoveGameState } from "../types";
+import { GameState, GameType, ChessGameState, MorrisGameState, TTTMoveGameState, PartshiGameState } from "../types";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA1dOqowN6zPTIrk4A-7ckTl325bQgVGyI",
@@ -101,6 +101,18 @@ export const updateTTTMoveState = async (roomId: string, newState: TTTMoveGameSt
 
 export const subscribeToTTTMove = (roomId: string, callback: (data: TTTMoveGameState | null) => void) => {
     return onValue(ref(db, `games/${roomId}_TTT_MOVE`), (snapshot) => {
+        callback(snapshot.val());
+    });
+};
+
+// --- Partshi Game State ---
+
+export const updatePartshiState = async (roomId: string, newState: PartshiGameState) => {
+    await set(ref(db, `games/${roomId}_PARTSHI`), newState);
+};
+
+export const subscribeToPartshi = (roomId: string, callback: (data: PartshiGameState | null) => void) => {
+    return onValue(ref(db, `games/${roomId}_PARTSHI`), (snapshot) => {
         callback(snapshot.val());
     });
 };

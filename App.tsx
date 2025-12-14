@@ -20,7 +20,8 @@ import UnoGame from './components/UnoGame';
 import ChessGame from './components/ChessGame';
 import MorrisGame from './components/MorrisGame';
 import TTTMoveGame from './components/TTTMoveGame';
-import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2, Grid3x3, LayoutGrid, Trophy } from 'lucide-react';
+import PartshiGame from './components/PartshiGame';
+import { Users, Heart, ChevronLeft, Delete, Spade, Sparkles, Check, Loader2, Grid3x3, LayoutGrid, Trophy, Dices } from 'lucide-react';
 
 const PLAYER_AMINE = { id: 0, name: "Amine" };
 const PLAYER_HASNAE = { id: 1, name: "Hasnae" };
@@ -391,6 +392,7 @@ export default function App() {
                      {renderCard('CHESS', 'CHESS', 'emerald', Spade, 'from-emerald-700/10 to-white/5')}
                      {renderCard('MORRIS', '3 MORRIS', 'violet', Grid3x3, 'from-violet-700/10 to-fuchsia-500/5')}
                      {renderCard('TTT_MOVE', 'TTT MOVE', 'cyan', LayoutGrid, 'from-cyan-700/10 to-teal-500/5')}
+                     {renderCard('PARTSHI', 'PARTSHI', 'orange', Dices, 'from-orange-700/10 to-amber-500/5')}
                 </div>
             </div>
             
@@ -424,6 +426,10 @@ export default function App() {
 
   if (activeGame === 'TTT_MOVE') {
       return <TTTMoveGame myPlayerId={myPlayerId} onExit={handleExitGame} />;
+  }
+  
+  if (activeGame === 'PARTSHI') {
+      return <PartshiGame myPlayerId={myPlayerId} onExit={handleExitGame} />;
   }
 
   return <div>Loading...</div>;

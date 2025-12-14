@@ -60,7 +60,7 @@ export interface GameState {
 
 // --- Chess Types ---
 
-export type GameType = 'UNO' | 'CHESS' | 'MORRIS' | 'TTT_MOVE' | null;
+export type GameType = 'UNO' | 'CHESS' | 'MORRIS' | 'TTT_MOVE' | 'PARTSHI' | null;
 
 export interface ChessPiece {
   type: 'p' | 'r' | 'n' | 'b' | 'q' | 'k'; // pawn, rook, knight, bishop, queen, king
@@ -102,4 +102,23 @@ export interface TTTMoveGameState {
   piecesO: number;
   winner: 'X' | 'O' | null;
   log: string;
+}
+
+// --- Partshi Types ---
+
+export interface PartshiPiece {
+    id: number; // 0-3
+    position: number; // -1 = Base, 0-51 = Track, 100+ = Home Path (100-105 for P0, 200-205 for P1), 999 = Goal
+}
+
+export interface PartshiGameState {
+    players: {
+        0: PartshiPiece[]; // Amine
+        1: PartshiPiece[]; // Hasnae
+    };
+    turn: number; // 0 or 1
+    dice: number | null; // 1-6
+    canRoll: boolean;
+    winner: number | null;
+    log: string;
 }
