@@ -10,7 +10,7 @@ interface PartshiGameProps {
     onExit: () => void;
 }
 
-const PLAYER_NAMES = { 0: 'Amine', 1: 'Hasnae' };
+const PLAYER_NAMES: Record<number, string> = { 0: 'Amine', 1: 'Hasnae' };
 
 // --- Professional Board Constants ---
 const BOARD_SIZE = 100; // viewBox 0 0 100 100

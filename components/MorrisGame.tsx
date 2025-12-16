@@ -10,7 +10,7 @@ interface MorrisGameProps {
     onExit: () => void;
 }
 
-const PLAYER_NAMES = { 0: 'Amine', 1: 'Hasnae' };
+const PLAYER_NAMES: Record<number, string> = { 0: 'Amine', 1: 'Hasnae' };
 
 export default function MorrisGame({ myPlayerId, onExit }: MorrisGameProps) {
     const [gameState, setGameState] = useState<MorrisGameState | null>(null);
