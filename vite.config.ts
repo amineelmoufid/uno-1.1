@@ -1,11 +1,7 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react"; // if you use React
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: './', // Ensures assets are linked relatively, which is required for GitHub Pages
-  build: {
-    outDir: 'dist',
-  }
+  base: "/uno-1.1/",
 });
